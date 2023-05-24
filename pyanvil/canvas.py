@@ -1,5 +1,6 @@
 import math
 from .schematic import Schematic
+from .coordinate import AbsoluteCoordinate
 
 
 class WorldTask:
@@ -10,7 +11,7 @@ class WorldTask:
 
 class Canvas:
 
-    def __init__(self, world, auto_commit=True):
+    def __init__(self, world: 'World', auto_commit: bool = True):
         self.world: 'World' = world
         self.work_queue: list[WorldTask] = []
         self.auto_commit: bool = auto_commit
@@ -30,12 +31,12 @@ class Canvas:
         self.selection.clear()
 
     def copy(self):
-        min_x = min((l[0] for l in self.selection))
-        min_y = min((l[1] for l in self.selection))
-        min_z = min((l[2] for l in self.selection))
+        min_x = min((loc.x for loc in self.selection))
+        min_y = min((loc.y for loc in self.selection))
+        min_z = min((loc.z for loc in self.selection))
         print(min_x, min_y, min_z)
         new_schem = Schematic({
-            (loc[0] - min_x, loc[1] - min_y, loc[2] - min_z): self.world.get_block(loc).get_state() for loc in self.selection
+            AbsoluteCoordinate(loc.x - min_x, loc.y - min_y, loc.z - min_z): self.world.get_block(loc).get_state() for loc in self.selection
         })
         self.deselect()
         return new_schem
@@ -54,19 +55,19 @@ class Canvas:
                 self.world.get_block(task.location).set_state(task.new_state)
             self.world.flush()
 
-    def select_rectangle(self, p1, p2):
+    def select_rectangle(self, p1: AbsoluteCoordinate, p2: AbsoluteCoordinate):
         self._rect(p1, p2, True)
         return self
 
-    def deselect_rectangle(self, p1, p2):
+    def deselect_rectangle(self, p1: AbsoluteCoordinate, p2: AbsoluteCoordinate):
         self._rect(p1, p2, False)
         return self
 
-    def _rect(self, p1, p2, select):
-        for x in range(p1[0], p2[0] + 1):
-            for y in range(p1[1], p2[1] + 1):
-                for z in range(p1[2], p2[2] + 1):
-                    loc = (x, y, z)
+    def _rect(self, p1: AbsoluteCoordinate, p2: AbsoluteCoordinate, select: bool):
+        for x in range(p1.x, p2.x + 1):
+            for y in range(p1.y, p2.y + 1):
+                for z in range(p1.z, p2.z + 1):
+                    loc = AbsoluteCoordinate(x, y, z)
                     if select:
                         self.selection.add(loc)
                     else:
@@ -91,9 +92,9 @@ class Canvas:
     #                 else:
     #                     self.selection.remove(loc)
 
-    def _dist(loc1, loc2):
-        dx = abs(loc1[0] - loc2[0]) ** 2
-        dy = abs(loc1[1] - loc2[1]) ** 2
-        dz = abs(loc1[2] - loc2[2]) ** 2
+    def _dist(loc1: AbsoluteCoordinate, loc2: AbsoluteCoordinate):
+        dx = abs(loc1.x - loc2.x) ** 2
+        dy = abs(loc1.y - loc2.y) ** 2
+        dz = abs(loc1.z - loc2.z) ** 2
 
         return math.sqrt(dx + dy + dz)
