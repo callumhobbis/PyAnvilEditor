@@ -2,7 +2,7 @@ from typing import BinaryIO
 from ..coordinate import AbsoluteCoordinate, ChunkCoordinate
 
 from .component_base import ComponentBase
-from . import ChunkSection, Sizes, Block, Biome
+from . import ChunkSection, Sizes, Block, Biome, BiomeRegion
 from . import CompoundTag, ListTag
 from ..utility.nbt import NBT
 from ..stream import InputStream, OutputStream
@@ -15,7 +15,6 @@ class Chunk(ComponentBase):
         self.coordinate = coord
         self.sections: dict[int, ChunkSection] = sections
         self.raw_nbt = raw_nbt
-        self.biomes = [Biome.from_index(i) for i in self.raw_nbt.get('Level').get('Biomes').get()]
         self.orig_size = orig_size
         self.__index = Chunk.to_region_chunk_index(coord)
         for section in self.sections.values():
@@ -31,9 +30,8 @@ class Chunk(ComponentBase):
         file.read(1)  # Compression scheme
         decompressed = zlib.decompress(file.read(datalen - 1))
         data = NBT.parse_nbt(InputStream(decompressed))
-        root_tag = data.get("Level")
-        x = root_tag.get("xPos").get()
-        z = root_tag.get("zPos").get()
+        x = data.get("xPos").get()
+        z = data.get("zPos").get()
         return Chunk(ChunkCoordinate(x, z), Chunk.__unpack_sections(data), data, datalen, parent_region=parent_region)
 
     def package_and_compress(self):
@@ -66,7 +64,8 @@ class Chunk(ComponentBase):
             self.sections[key] = ChunkSection(
                 CompoundTag(),
                 key,
-                blocks=[Block(dirty=True) for i in range(4096)],
+                blocks=[Block(dirty=True) for i in range(Sizes.REGION_WIDTH**3)],
+                biome_regions=[BiomeRegion(dirty=True) for i in range((Sizes.REGION_WIDTH//Sizes.Biome_REGION_WIDTH)**3)],
                 parent_chunk=self
             )
         return self.sections[key]
@@ -96,18 +95,18 @@ class Chunk(ComponentBase):
     @staticmethod
     def __unpack_sections(raw_nbt):
         sections = {}
-        for section in raw_nbt.get('Level').get('Sections').children:
+        for section in raw_nbt.get('sections').children:
             sections[section.get('Y').get()] = ChunkSection.from_nbt(section)
         return sections
 
     def pack(self):
         new_sections: ListTag = ListTag(
             CompoundTag.clazz_id,
-            tag_name='Sections',
+            tag_name='sections',
             children=[sec.serialize() for sec in self.sections.values()]
         )
         new_nbt = self.raw_nbt.clone()
-        new_nbt.get('Level').add_child(new_sections)
+        new_nbt.add_child(new_sections)
 
         return new_nbt
 

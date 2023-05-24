@@ -1,16 +1,21 @@
 import math
+
 from .component_base import ComponentBase
-from . import Block, BlockState, Sizes
+from . import Block, BlockState, Biome, BiomeRegion, Sizes
 from . import ByteArrayTag, ByteTag, CompoundTag, StringTag, LongArrayTag, LongTag, ListTag
 
 
 class ChunkSection(ComponentBase):
-    def __init__(self, raw_section, y_index, blocks: dict[int, Block] = None, parent_chunk: 'Chunk' = None):
+    def __init__(self, raw_section, y_index, blocks: dict[int, Block] = None, biome_regions: dict[int, BiomeRegion] = None, parent_chunk: 'Chunk' = None):
         super().__init__(parent=parent_chunk)
 
         if blocks is None:
             blocks = dict()
         self.__blocks: dict[int, Block] = blocks
+
+        if biome_regions is None:
+            biome_regions = dict()
+        self.__biome_regions: dict[int, BiomeRegion] = biome_regions
 
         self.raw_section = raw_section
         self.y_index = y_index
@@ -28,46 +33,85 @@ class ChunkSection(ComponentBase):
         else:
             self.__blocks = dict()
 
+    def get_biome(self, biome_pos):
+        x = biome_pos[0]
+        y = biome_pos[1]
+        z = biome_pos[2]
+
+        biome_region_count = Sizes.SUBCHUNK_WIDTH // Sizes.BIOME_REGION_WIDTH
+        return self.__biome_regions[x + z * biome_region_count + y * biome_region_count ** 2]
+
+    def set_biome_regions(self, biome_regions: dict[int, Biome]):
+        if biome_regions is not None:
+            self.__biome_regions = biome_regions
+        else:
+            self.__biome_regions = dict()
+
+
     @staticmethod
     def from_nbt(section_nbt, parent_chunk=None) -> 'ChunkSection':
-        states = []  # Sections which contain only air have no states.
-        if section_nbt.has('BlockStates'):
-            flatstates = [c.get() for c in section_nbt.get('BlockStates').children]
-            pack_size = (len(flatstates) * 64) // (Sizes.SUBCHUNK_WIDTH ** 3)
+        states_palette = [
+            BlockState(
+                state.get('Name').get(),
+                state.get('Properties').to_dict() if state.has('Properties') else {}
+            ) for state in section_nbt.get('block_states').get('palette').children
+        ]
+        if len(states_palette) == 1:
+            states = [0] * 16**3
+        else:
+            flatstates = [c.get() for c in section_nbt.get('block_states').get('data').children]
+            pack_size = max(4, (len(states_palette) - 1).bit_length())
             states = [
                 ChunkSection._read_width_from_loc(flatstates, pack_size, i) for i in range(Sizes.SUBCHUNK_WIDTH ** 3)
             ]
-        palette: list[BlockState] = None
-        if section_nbt.has('Palette'):
-            palette = [
-                BlockState(
-                    state.get('Name').get(),
-                    state.get('Properties').to_dict() if state.has('Properties') else {}
-                ) for state in section_nbt.get('Palette').children
-            ]
+
         block_lights = ChunkSection._divide_nibbles(section_nbt.get('BlockLight').get()) if section_nbt.has('BlockLight') else None
         sky_lights = ChunkSection._divide_nibbles(section_nbt.get('SkyLight').get()) if section_nbt.has('SkyLight') else None
         section = ChunkSection(section_nbt, section_nbt.get('Y').get(), parent_chunk=parent_chunk)
         blocks: dict[int, Block] = dict()
         for i, state in enumerate(states):
-            state = palette[state]
+            state = states_palette[state]
             block_light = block_lights[i] if block_lights else 0
             sky_light = sky_lights[i] if sky_lights else 0
             blocks[i] = Block(state=state, block_light=block_light, sky_light=sky_light, parent_chunk_section=section)
         section.set_blocks(blocks=blocks)
+
+        biomes_palette = [
+            Biome(
+                biome.get()
+            ) for biome in section_nbt.get('biomes').get('palette').children
+        ]
+        if len(biomes_palette) == 1:
+            biomes = [0] * 16**3
+        else:
+            flatbiomes = [c.get() for c in section_nbt.get('biomes').get('data').children]
+            pack_size = (len(biomes_palette) - 1).bit_length()
+            biomes = ChunkSection._read_width_from_loc(flatbiomes, pack_size, (Sizes.SUBCHUNK_WIDTH//Sizes.BIOME_REGION_WIDTH)**3)
+
+        biome_regions: dict[int, BiomeRegion] = dict()
+        for i, biome in enumerate(biomes):
+            biome = biomes_palette[biome]
+            biome_regions[i] = BiomeRegion(biome=biome, parent_chunk_section=section)
+        section.set_biome_regions(biome_regions=biome_regions)
+
         return section
 
     def serialize(self):
         serial_section = self.raw_section
-        dirty = any((b.is_dirty for b in self.__blocks.values()))
-        if dirty:
-            self.palette = list(set([b._state for b in self.__blocks.values()] + [BlockState('minecraft:air', {})]))
-            self.palette.sort(key=lambda s: s.name)
+        blocks_dirty = any((b.is_dirty for b in self.__blocks.values()))
+        if blocks_dirty:
+            self.states_palette = list(set([b._state for b in self.__blocks.values()] + [BlockState('minecraft:air', {})]))
+            self.states_palette.sort(key=lambda s: s.name)
             serial_section.add_child(ByteTag(tag_value=self.y_index, tag_name='Y'))
-            mat_id_mapping = {self.palette[i]: i for i in range(len(self.palette))}
-            new_palette = self._serialize_palette()
-            serial_section.add_child(new_palette)
+            mat_id_mapping = {self.states_palette[i]: i for i in range(len(self.states_palette))}
             serial_section.add_child(self._serialize_blockstates(mat_id_mapping))
+
+        biomes_dirty = any((b.is_dirty for b in self.__biome_regions.values()))
+        if biomes_dirty:
+            self.biomes_palette = list(set(b._biome for b in self.__biome_regions.values()))
+            self.biomes_palette.sort(key=lambda b: b.name)
+            biome_id_mapping = {self.biomes_palette[i]: i for i in range(len(self.biomes_palette))}
+            serial_section.add_child(self._serialize_biomes(biome_id_mapping))
 
         if not serial_section.has('SkyLight'):
             serial_section.add_child(ByteArrayTag(tag_name='SkyLight', children=[ByteTag(-1, tag_name='None') for i in range(2048)]))
@@ -77,9 +121,9 @@ class ChunkSection(ComponentBase):
 
         return serial_section
 
-    def _serialize_palette(self):
-        serial_palette = ListTag(CompoundTag.clazz_id, tag_name='Palette')
-        for state in self.palette:
+    def _serialize_states_palette(self):
+        serial_palette = ListTag(CompoundTag.clazz_id, tag_name='palette')
+        for state in self.states_palette:
             palette_item = CompoundTag(tag_name='None', children=[
                 StringTag(state.name, tag_name='Name')
             ])
@@ -93,8 +137,12 @@ class ChunkSection(ComponentBase):
         return serial_palette
 
     def _serialize_blockstates(self, state_mapping):
-        serial_states = LongArrayTag(tag_name='BlockStates')
-        width = math.ceil(math.log(len(self.palette), 2))
+        serial_blockstates = CompoundTag(tag_name='block_states')
+        serial_palette = self._serialize_states_palette()
+        serial_blockstates.add_child(serial_palette)
+
+        serial_data = LongArrayTag(tag_name='data')
+        width = math.ceil(math.log(len(self.states_palette), 2))
         if width < 4:
             width = 4
 
@@ -115,8 +163,46 @@ class ChunkSection(ComponentBase):
                     lng = (lng << width) + state_mapping[block._state]
 
             lng = int.from_bytes(lng.to_bytes(8, byteorder='big', signed=False), byteorder='big', signed=True)
-            serial_states.add_child(LongTag(lng))
-        return serial_states
+            serial_data.add_child(LongTag(lng))
+
+        serial_blockstates.add_child(serial_data)
+        return serial_blockstates
+
+    def _serialize_biomes_palette(self):
+        serial_palette = ListTag(StringTag.clazz_id, tag_name='palette')
+        for biome in self.biomes_palette:
+            serial_palette.add_child(StringTag(biome.name, tag_name='Name'))
+        return serial_palette
+
+    def _serialize_biomes(self, biome_mapping):
+        serial_biomes = CompoundTag(tag_name='biomes')
+        serial_palette = self._serialize_biomes_palette()
+        serial_biomes.add_child(serial_palette)
+
+        serial_data = LongArrayTag(tag_name='data')
+        width = math.ceil(math.log(len(self.biomes_palette), 2))
+
+        # max amount of states that fit in a long
+        biomes_per_long = 64 // width
+
+        # amount of longs
+        arraylength = math.ceil(len(self.__biome_regions) / biomes_per_long)
+
+        for long_index in range(arraylength):
+            lng = 0
+            for state in range(biomes_per_long):
+                # insert blocks in reverse, so first one ends up most to the right
+                biome_index = long_index * biomes_per_long + (biomes_per_long - state - 1)
+
+                if biome_index < len(self.__biome_regions):
+                    biome_region = self.__biome_regions[biome_index]
+                    lng = (lng << width) + biome_mapping[biome_region._biome]
+
+            lng = int.from_bytes(lng.to_bytes(8, byteorder='big', signed=False), byteorder='big', signed=True)
+            serial_data.add_child(LongTag(lng))
+
+        serial_biomes.add_child(serial_data)
+        return serial_biomes
 
     @staticmethod
     def _read_width_from_loc(long_list, width, position):
