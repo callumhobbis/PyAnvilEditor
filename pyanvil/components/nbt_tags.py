@@ -1,5 +1,5 @@
-from ..utility.nbt import NBT
-from ..utility.nbt import TagType
+from pyanvil.utility.nbt import NBT
+from pyanvil.utility.nbt import TagType
 
 ByteTag = NBT.create_simple_nbt_class(TagType.BYTE, 'Byte', 1, '>b')
 ShortTag = NBT.create_simple_nbt_class(TagType.SHORT, 'Short', 2, '>h')

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import struct
 from enum import IntEnum
-from ..stream import InputStream, OutputStream
+from pyanvil.stream import InputStream, OutputStream
 
 
 class TagType(IntEnum):

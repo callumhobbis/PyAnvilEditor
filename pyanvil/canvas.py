@@ -1,6 +1,6 @@
 import math
-from .schematic import Schematic
-from .coordinate import AbsoluteCoordinate
+from pyanvil.schematic import Schematic
+from pyanvil.coordinate import AbsoluteCoordinate
 
 
 class WorldTask:

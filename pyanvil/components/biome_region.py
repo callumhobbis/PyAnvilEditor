@@ -1,5 +1,5 @@
-from . import Biome
-from .component_base import ComponentBase
+from pyanvil.components.biome import Biome
+from pyanvil.components.component_base import ComponentBase
 
 
 class BiomeRegion(ComponentBase):

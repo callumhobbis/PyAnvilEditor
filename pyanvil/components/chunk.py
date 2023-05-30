@@ -1,11 +1,11 @@
 from typing import BinaryIO
-from ..coordinate import AbsoluteCoordinate, ChunkCoordinate
+from pyanvil.coordinate import AbsoluteCoordinate, ChunkCoordinate
 
-from .component_base import ComponentBase
-from . import ChunkSection, Sizes, Block, Biome, BiomeRegion
-from . import CompoundTag, ListTag
-from ..utility.nbt import NBT
-from ..stream import InputStream, OutputStream
+from pyanvil.components.component_base import ComponentBase
+from pyanvil.components import ChunkSection, Sizes, Block, Biome, BiomeRegion
+from pyanvil.components import CompoundTag, ListTag
+from pyanvil.utility.nbt import NBT
+from pyanvil.stream import InputStream, OutputStream
 import zlib
 
 

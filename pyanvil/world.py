@@ -2,10 +2,10 @@ from types import TracebackType
 from typing import Self
 from pathlib import Path
 
-from .components.region import Region
-from .coordinate import AbsoluteCoordinate, ChunkCoordinate, RegionCoordinate
-from .canvas import Canvas
-from .components import Chunk, Block
+from pyanvil.components.region import Region
+from pyanvil.coordinate import AbsoluteCoordinate, ChunkCoordinate, RegionCoordinate
+from pyanvil.canvas import Canvas
+from pyanvil.components import Chunk, Block
 
 
 class World:

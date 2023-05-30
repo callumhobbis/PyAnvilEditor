@@ -1,5 +1,5 @@
-from . import BlockState
-from .component_base import ComponentBase
+from pyanvil.components import BlockState
+from pyanvil.components.component_base import ComponentBase
 
 
 class Block(ComponentBase):

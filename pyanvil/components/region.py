@@ -6,10 +6,10 @@ from time import time
 from typing import BinaryIO, Union
 import logging
 
-from ..coordinate import ChunkCoordinate
-from . import Chunk
-from .component_base import ComponentBase
-from .constants import Sizes
+from pyanvil.coordinate import ChunkCoordinate
+from pyanvil.components import Chunk
+from pyanvil.components.component_base import ComponentBase
+from pyanvil.components.constants import Sizes
 
 
 class Region(ComponentBase):

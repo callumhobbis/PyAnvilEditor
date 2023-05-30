@@ -1,4 +1,4 @@
-from .coordinate import AbsoluteCoordinate
+from pyanvil.coordinate import AbsoluteCoordinate
 
 
 class Schematic:

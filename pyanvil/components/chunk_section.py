@@ -1,8 +1,8 @@
 import math
 
-from .component_base import ComponentBase
-from . import Block, BlockState, Biome, BiomeRegion, Sizes
-from . import ByteArrayTag, ByteTag, CompoundTag, StringTag, LongArrayTag, LongTag, ListTag
+from pyanvil.components.component_base import ComponentBase
+from pyanvil.components import Block, BlockState, Biome, BiomeRegion, Sizes
+from pyanvil.components import ByteArrayTag, ByteTag, CompoundTag, StringTag, LongArrayTag, LongTag, ListTag
 
 
 class ChunkSection(ComponentBase):
