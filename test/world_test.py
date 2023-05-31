@@ -1,5 +1,6 @@
-from pyanvil import BlockState, World
+from pyanvil.components import BlockState
 from pyanvil.coordinate import AbsoluteCoordinate
+from pyanvil.world import World
 
 
 def test_block_place():
