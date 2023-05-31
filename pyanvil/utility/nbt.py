@@ -22,8 +22,28 @@ class TagType(IntEnum):
 
 
 class BaseNBTTag(ABC):
+
+    tag_name: str
+
+    @classmethod
     @abstractmethod
-    def serialize(self, stream: OutputStream, include_name=True):
+    def parse(cls, stream: InputStream, name: str) -> Self:
+        pass
+
+    @abstractmethod
+    def print(self, indent: str) -> None:
+        pass
+
+    @abstractmethod
+    def get(self) -> Any:
+        pass
+
+    @abstractmethod
+    def serialize(self, stream: OutputStream, include_name=True) -> None:
+        pass
+
+    @abstractmethod
+    def clone(self) -> Self:
         pass
 
 
