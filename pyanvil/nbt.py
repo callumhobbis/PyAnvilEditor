@@ -37,6 +37,10 @@ class BaseTag(ABC):
         pass
 
     @abstractmethod
+    def get(self) -> Any:
+        pass
+
+    @abstractmethod
     def serialize(self, stream: OutputStream, include_name=True) -> None:
         pass
 
@@ -235,6 +239,9 @@ class BaseArrayTag(BaseTag):
     def get(self) -> list[int]:
         return [int(c.get()) for c in self.children]
 
+    def __getitem__(self, index: int) -> BaseDataTag:
+        return self.children[index]
+
     def serialize(
         self,
         stream: OutputStream,
@@ -320,6 +327,9 @@ class ListTag(BaseTag):
     def get(self) -> list:
         return [c.get() for c in self.children]
 
+    def __getitem__(self, index: int) -> BaseTag:
+        return self.children[index]
+
     def name(self) -> str:
         return self.tag_name
 
@@ -393,11 +403,14 @@ class CompoundTag(BaseTag):
     def add_child(self, tag: BaseTag) -> None:
         self.children[tag.tag_name] = tag
 
-    def get(self, name: str) -> BaseTag:
+    def get(self) -> dict[str, Any]:
+        return {n: v.get() for n, v in self.children.items()}
+
+    def __getitem__(self, name: str) -> BaseTag:
         return self.children[name]
 
-    # def get(self):
-    #     return { n: v.get() for n, v in self.children }
+    def __contains__(self, name: str) -> bool:
+        return name in self.children
 
     def name(self) -> str:
         return self.tag_name

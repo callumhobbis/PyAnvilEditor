@@ -30,7 +30,7 @@ with gzip.open('level.dat', mode='rb') as level:
     # Decode the stream
     level_data = NBT.parse_nbt(in_stream)
     # Get the value of Data > LevelName
-    lvl_name = level_data.get("Data").get("LevelName").get()
+    lvl_name = level_data["Data"]["LevelName"].get()
     # lvl_name is now a string containing the name of the level used
 
 ```

@@ -240,22 +240,22 @@ class ChunkSection(ComponentBase):
     ) -> ChunkSection:
         states_palette = [
             BlockState(
-                state.get('Name').get(),
-                state.get('Properties').to_dict() if state.has('Properties') else {}
-            ) for state in section_nbt.get('block_states').get('palette').children
+                state['Name'].get(),
+                state['Properties'].to_dict() if 'Properties' in state else {}
+            ) for state in section_nbt['block_states']['palette']
         ]
         if len(states_palette) == 1:
             states = [0] * 16**3
         else:
-            flatstates = [c.get() for c in section_nbt.get('block_states').get('data').children]
+            flatstates = [c.get() for c in section_nbt['block_states']['data']]
             pack_size = max(4, (len(states_palette) - 1).bit_length())
             states = [
                 ChunkSection._read_width_from_loc(flatstates, pack_size, i) for i in range(Sizes.SUBCHUNK_WIDTH ** 3)
             ]
 
-        block_lights = ChunkSection._divide_nibbles(section_nbt.get('BlockLight').get()) if section_nbt.has('BlockLight') else None
-        sky_lights = ChunkSection._divide_nibbles(section_nbt.get('SkyLight').get()) if section_nbt.has('SkyLight') else None
-        section = ChunkSection(section_nbt, section_nbt.get('Y').get(), parent_chunk=parent_chunk)
+        block_lights = ChunkSection._divide_nibbles(section_nbt['BlockLight'].get()) if 'BlockLight' in section_nbt else None
+        sky_lights = ChunkSection._divide_nibbles(section_nbt['SkyLight'].get()) if 'SkyLight' in section_nbt else None
+        section = ChunkSection(section_nbt, section_nbt['Y'].get(), parent_chunk=parent_chunk)
         blocks: dict[int, Block] = dict()
         for i, state in enumerate(states):
             state = states_palette[state]
@@ -267,12 +267,12 @@ class ChunkSection(ComponentBase):
         biomes_palette = [
             Biome(
                 biome.get()
-            ) for biome in section_nbt.get('biomes').get('palette').children
+            ) for biome in section_nbt['biomes']['palette']
         ]
         if len(biomes_palette) == 1:
             biomes = [0] * 16**3
         else:
-            flatbiomes = [c.get() for c in section_nbt.get('biomes').get('data').children]
+            flatbiomes = [c.get() for c in section_nbt['biomes']['data']]
             pack_size = (len(biomes_palette) - 1).bit_length()
             biomes = ChunkSection._read_width_from_loc(flatbiomes, pack_size, (Sizes.SUBCHUNK_WIDTH//Sizes.BIOME_REGION_WIDTH)**3)
 
@@ -450,8 +450,8 @@ class Chunk(ComponentBase):
         file.read(1)  # Compression scheme
         decompressed = zlib.decompress(file.read(datalen - 1))
         data = NBT.parse_nbt(InputStream(decompressed))
-        x = data.get("xPos").get()
-        z = data.get("zPos").get()
+        x = data['xPos'].get()
+        z = data['zPos'].get()
         return Chunk(ChunkCoordinate(x, z), Chunk.__unpack_sections(data), data, datalen, parent_region=parent_region)
 
     def package_and_compress(self):
@@ -517,8 +517,8 @@ class Chunk(ComponentBase):
     @staticmethod
     def __unpack_sections(raw_nbt: BaseTag):
         sections = {}
-        for section in raw_nbt.get('sections').children:
-            sections[section.get('Y').get()] = ChunkSection.from_nbt(section)
+        for section in raw_nbt['sections']:
+            sections[section['Y'].get()] = ChunkSection.from_nbt(section)
         return sections
 
     def pack(self):
