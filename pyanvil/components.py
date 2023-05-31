@@ -350,7 +350,7 @@ class ChunkSection(ComponentBase):
                     block = self.__blocks[block_index]
                     lng = (lng << width) + state_mapping[block._state]
 
-            lng = int.from_bytes(lng.to_bytes(8, byteorder='big', signed=False), byteorder='big', signed=True)
+            lng = int.from_bytes(lng.to_bytes(8), signed=True)
             serial_data.add_child(LongTag(lng))
 
         serial_blockstates.add_child(serial_data)
@@ -386,7 +386,7 @@ class ChunkSection(ComponentBase):
                     biome_region = self.__biome_regions[biome_index]
                     lng = (lng << width) + biome_mapping[biome_region._biome]
 
-            lng = int.from_bytes(lng.to_bytes(8, byteorder='big', signed=False), byteorder='big', signed=True)
+            lng = int.from_bytes(lng.to_bytes(8), signed=True)
             serial_data.add_child(LongTag(lng))
 
         serial_biomes.add_child(serial_data)
@@ -446,7 +446,7 @@ class Chunk(ComponentBase):
     @staticmethod
     def from_file(file: BinaryIO, offset: int, sections: int, parent_region: Region = None) -> 'Chunk':
         file.seek(offset)
-        datalen = int.from_bytes(file.read(4), byteorder="big", signed=False)
+        datalen = int.from_bytes(file.read(4))
         file.read(1)  # Compression scheme
         decompressed = zlib.decompress(file.read(datalen - 1))
         data = NBT.parse_nbt(InputStream(decompressed))
@@ -599,10 +599,10 @@ class Region(ComponentBase):
             block_data_len = math.ceil((datalen + 5) / 4096.0) * 4096
 
             # Constuct new data block
-            data: bytes = (datalen + 1).to_bytes(length=4, byteorder='big', signed=False)  # Total length of chunk data
-            data += (2).to_bytes(length=1, byteorder='big', signed=False)
+            data: bytes = (datalen + 1).to_bytes(4)  # Total length of chunk data
+            data += (2).to_bytes(1)
             data += chunk_data
-            data += (0).to_bytes(block_data_len - (datalen + 5), byteorder='big', signed=False)
+            data += (0).to_bytes(block_data_len - (datalen + 5))
 
             loc = self.__chunk_locations[index]
             original_sector_length = loc[1]
@@ -633,17 +633,17 @@ class Region(ComponentBase):
 
         required_padding = (math.ceil(self.file.tell() / 4096.0) * 4096) - self.file.tell()
 
-        self.file.write((0).to_bytes(required_padding, byteorder='big', signed=False))
+        self.file.write((0).to_bytes(required_padding))
 
         self.is_dirty = False
 
     def __write_header(self, file: BinaryIO):
         for c_loc in self.__chunk_locations:
-            file.write(int(c_loc[0] / 4096).to_bytes(3, byteorder='big', signed=False))
-            file.write(int(c_loc[1] / 4096).to_bytes(1, byteorder='big', signed=False))
+            file.write(int(c_loc[0] / 4096).to_bytes(3))
+            file.write(int(c_loc[1] / 4096).to_bytes(1))
 
         for ts in self.timestamps:
-            file.write(ts.to_bytes(4, byteorder='big', signed=False))
+            file.write(ts.to_bytes(4))
 
     def get_chunk(self, coord: ChunkCoordinate):
         chunk_index = Chunk.to_region_chunk_index(coord)
@@ -669,7 +669,7 @@ class Region(ComponentBase):
             self.__chunk_locations = [
                 # Nested list containing 2 elements, one taking 3 bytes, one with 1 byte
                 [
-                    int.from_bytes(offset, byteorder='big', signed=False) * Sizes.CHUNK_SECTOR_SIZE,
+                    int.from_bytes(offset) * Sizes.CHUNK_SECTOR_SIZE,
                     size * Sizes.CHUNK_SECTOR_SIZE
                 ]
                 for (*offset, size) in Region.iterate_in_groups(
@@ -683,7 +683,7 @@ class Region(ComponentBase):
         if self.__timestamps is None:
             # Interpret header chunk
             self.__timestamps = [
-                int.from_bytes(t, byteorder='big', signed=False)
+                int.from_bytes(t)
                 for t in Region.iterate_in_groups(
                     self.__timestamps_data, group_size=4, start=4 * 1024, end=8 * 1024
                 )

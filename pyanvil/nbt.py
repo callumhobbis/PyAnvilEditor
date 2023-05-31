@@ -92,7 +92,7 @@ class BaseDataTag(BaseTag):
         include_name: bool = True,
     ) -> None:
         if include_name:
-            stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
+            stream.write(type(self).clazz_id.to_bytes(1))
             NBT.write_string(stream, self.tag_name)
 
         stream.write(struct.pack(type(self).clazz_parser, self.tag_value))
@@ -159,7 +159,7 @@ class StringTag(BaseTag):
 
     @classmethod
     def parse(cls, stream: InputStream, name: str) -> Self:
-        payload_length = int.from_bytes(stream.read(2), byteorder='big', signed=False)
+        payload_length = int.from_bytes(stream.read(2))
         payload = stream.read(payload_length).decode('utf-8')
         return cls(payload, tag_name=name)
 
@@ -182,12 +182,12 @@ class StringTag(BaseTag):
         include_name: bool = True,
     ) -> None:
         if include_name:
-            stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
+            stream.write(type(self).clazz_id.to_bytes(1))
             NBT.write_string(stream, self.tag_name)
 
-        stream.write(len(self.tag_value).to_bytes(2, byteorder='big', signed=False))
+        stream.write(len(self.tag_value).to_bytes(2))
         for c in self.tag_value:
-            stream.write(ord(c).to_bytes(1, byteorder='big', signed=False))
+            stream.write(ord(c).to_bytes(1))
 
     def clone(self) -> Self:
         return type(self)(self.tag_value, tag_name=self.tag_name)
@@ -212,7 +212,7 @@ class BaseArrayTag(BaseTag):
 
     @classmethod
     def parse(cls, stream: InputStream, name: str) -> Self:
-        payload_length = int.from_bytes(stream.read(4), byteorder='big', signed=True)
+        payload_length = int.from_bytes(stream.read(4), signed=True)
         tag = cls(tag_name=name)
         for i in range(payload_length):
             tag.add_child(cls.clazz_sub_type.parse(stream, 'None'))
@@ -248,10 +248,10 @@ class BaseArrayTag(BaseTag):
         include_name: bool = True,
     ) -> None:
         if include_name:
-            stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
+            stream.write(type(self).clazz_id.to_bytes(1))
             NBT.write_string(stream, self.tag_name)
 
-        stream.write(len(self.children).to_bytes(4, byteorder='big', signed=True))
+        stream.write(len(self.children).to_bytes(4, signed=True))
 
         for tag in self.children:
             tag.serialize(stream, include_name=False)
@@ -304,8 +304,8 @@ class ListTag(BaseTag):
 
     @classmethod
     def parse(cls, stream: InputStream, name: str) -> Self:
-        sub_type = int.from_bytes(stream.read(1), byteorder='big', signed=False)
-        payload_length = int.from_bytes(stream.read(4), byteorder='big', signed=True)
+        sub_type = int.from_bytes(stream.read(1))
+        payload_length = int.from_bytes(stream.read(4), signed=True)
         tag = cls(sub_type, tag_name=name)
         for i in range(payload_length):
             tag.add_child(NBT._parsers[sub_type].parse(stream, 'None'))
@@ -344,11 +344,11 @@ class ListTag(BaseTag):
         include_name: bool = True,
     ) -> None:
         if include_name:
-            stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
+            stream.write(type(self).clazz_id.to_bytes(1))
             NBT.write_string(stream, self.tag_name)
 
-        stream.write(self.sub_type_id.to_bytes(1, byteorder='big', signed=False))
-        stream.write(len(self.children).to_bytes(4, byteorder='big', signed=True))
+        stream.write(self.sub_type_id.to_bytes(1))
+        stream.write(len(self.children).to_bytes(4, signed=True))
 
         for tag in self.children:
             tag.serialize(stream, include_name=False)
@@ -431,13 +431,13 @@ class CompoundTag(BaseTag):
 
     def serialize(self, stream: OutputStream, include_name: bool = True) -> None:
         if include_name:
-            stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
+            stream.write(type(self).clazz_id.to_bytes(1))
             NBT.write_string(stream, self.tag_name)
 
         for tag_name in self.children:
             self.children[tag_name].serialize(stream, include_name=True)
 
-        stream.write((0).to_bytes(1, byteorder='big', signed=False))
+        stream.write((0).to_bytes(1))
 
     def clone(self) -> Self:
         return type(self)(tag_name=self.tag_name, children=[v.clone() for k, v in self.children.items()])
@@ -446,17 +446,17 @@ class CompoundTag(BaseTag):
         str_dat = ', '.join([c.__repr__() for name, c in self.children.items()])
         return f'CompoundTag: {self.tag_name} size {str(len(self.children))} = {{{str_dat}}}]'
 
-    def __eq__(self, other: Self) -> bool:
-        passed = True
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, CompoundTag):
+            return False
         for name, v in self.children.items():
             if name not in other.children:
-                passed = False
-            elif other.children[name] != v:
-                passed = False
+                return False
+            if other.children[name] != v:
+                return False
         return (
             self.tag_name == other.tag_name
             and len(self.children) == len(other.children)
-            and passed
         )
 
 
@@ -466,9 +466,9 @@ class NBT:
 
     @staticmethod
     def write_string(stream: OutputStream, string: str) -> None:
-        stream.write(len(string).to_bytes(2, byteorder='big', signed=False))
+        stream.write(len(string).to_bytes(2))
         for c in string:
-            stream.write(ord(c).to_bytes(1, byteorder='big', signed=False))
+            stream.write(ord(c).to_bytes(1))
 
     @staticmethod
     def register_parser(id: int, clazz: type[BaseTag]) -> None:
@@ -477,11 +477,12 @@ class NBT:
 
     @staticmethod
     def parse_nbt(stream: InputStream) -> BaseTag:
-        tag_type = int.from_bytes(stream.read(1), byteorder='big', signed=False)
-        tag_name_length = int.from_bytes(stream.read(2), byteorder='big', signed=False)
+        tag_type = int.from_bytes(stream.read(1))
+        tag_name_length = int.from_bytes(stream.read(2))
         tag_name = stream.read(tag_name_length).decode('utf-8')
 
         return NBT._parsers[tag_type].parse(stream, tag_name)
+
 
 tag_classes: list[type[BaseTag]] = [
     ByteTag, ShortTag, IntTag, LongTag, FloatTag, DoubleTag, StringTag,
