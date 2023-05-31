@@ -15,7 +15,7 @@ The `nbt` module is designed to load and save uncompressed binary data in nbt fo
 - `LongArray`: List of nameless 64 bit signed numbers
 - `StringTag`: List of bytes representing UTF-8 chars
 - `ListTag`: List any other tag
-- `CompundTag`: Unordered list of named tags of any type
+- `CompoundTag`: Unordered list of named tags of any type
 
 Calling `serialize` on an nbt tag with a file stream will write the binary data of the nbt tag to the file. The `stream.Output` class can also be used to emulate a file buffer.
 

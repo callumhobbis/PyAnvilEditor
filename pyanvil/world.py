@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import math
+from pathlib import Path
 from types import TracebackType
 from typing import Self
-from pathlib import Path
 
-from pyanvil.components import Region, Chunk, Block
+from pyanvil.components import Block, Chunk, Region
 from pyanvil.coordinate import AbsoluteCoordinate, ChunkCoordinate, RegionCoordinate
 
 
@@ -68,7 +70,7 @@ class World:
         region = self.get_region(coord.to_region_coordinate())
         return region.get_chunk(coord)
 
-    def get_canvas(self) -> Self:
+    def get_canvas(self) -> Canvas:
         return Canvas(self)
 
     def _load_region(self, coord: RegionCoordinate) -> Region:

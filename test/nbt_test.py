@@ -161,7 +161,7 @@ class TestListNBTTag:
         ])
         assert parsed_tag == tag, 'Tag ListTag with ListTag elements'
 
-    def test_serializing_compund_data(args):
+    def test_serializing_compound_data(args):
         tag = ListTag(CompoundTag.clazz_id, tag_name='Test', children=[
             CompoundTag(children=[ByteTag(25, tag_name='dp1'), ByteTag(31, tag_name='dp2')]),
             CompoundTag(children=[ByteTag(25, tag_name='dp3'), ByteTag(31, tag_name='dp4')])
@@ -179,7 +179,7 @@ class TestListNBTTag:
 
         assert binary_tag == expected_tag, 'Tag ListTag with ListTag elements'
 
-    def test_deserializing_compund_data(args):
+    def test_deserializing_compound_data(args):
         raw_tag = InputStream(bytearray([9, 0, 4] +
                                         list(b'Test') +
                                         [10, 0, 0, 0, 2] +

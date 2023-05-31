@@ -11,8 +11,8 @@ from pathlib import Path
 from time import time
 from typing import Self, BinaryIO, Union
 
-from pyanvil.coordinate import AbsoluteCoordinate, ChunkCoordinate
-from pyanvil.nbt import NBT, ByteArrayTag, ByteTag, CompoundTag, StringTag, LongArrayTag, LongTag, ListTag
+from pyanvil.coordinate import AbsoluteCoordinate, BiomeCoordinate, ChunkCoordinate
+from pyanvil.nbt import NBT, BaseTag, ByteArrayTag, ByteTag, CompoundTag, StringTag, LongArrayTag, LongTag, ListTag
 from pyanvil.stream import InputStream, OutputStream
 
 
@@ -25,13 +25,13 @@ class Sizes(IntEnum):
 
 class ComponentBase(ABC):
 
-    _parent: Self | None
+    _parent: ComponentBase | None
     _is_dirty: bool
-    _dirty_children: set['ComponentBase']
+    _dirty_children: set[ComponentBase]
 
     def __init__(
         self,
-        parent: 'ComponentBase' | None = None,
+        parent: ComponentBase | None = None,
         dirty: bool = False
     ) -> None:
         '''Handles "dirty" propagation up the component chain.'''
@@ -43,23 +43,27 @@ class ComponentBase(ABC):
     def is_dirty(self) -> bool:
         return self._is_dirty
 
+    @is_dirty.setter
+    def is_dirty(self, value: bool) -> None:
+        self._is_dirty = value
+
     def mark_as_dirty(self) -> None:
         self._is_dirty = True
         if self._parent is not None:
             self._parent.mark_child_as_dirty(self)
             self._parent.mark_as_dirty()
 
-    def mark_child_as_dirty(self, child: 'ComponentBase') -> None:
+    def mark_child_as_dirty(self, child: ComponentBase) -> None:
         self._dirty_children.add(child)
 
-    def set_parent(self, parent: 'ComponentBase') -> None:
+    def set_parent(self, parent: ComponentBase) -> None:
         self._parent = parent
 
 
 class Block(ComponentBase):
 
     _parent: ComponentBase | None
-    _is_dirty: bool
+    is_dirty: bool
     _dirty_children: set[ComponentBase]
 
     _state: BlockState
@@ -83,7 +87,7 @@ class Block(ComponentBase):
         return f'Block({str(self._state)}, {self.block_light}, {self.sky_light})'
 
     def set_state(self, state: BlockState | str) -> None:
-        self._is_dirty = True
+        self.is_dirty = True
         if isinstance(state, BlockState):
             self._state = state
         else:
@@ -115,17 +119,19 @@ class BlockState:
     def __hash__(self) -> int:
         return hash(self.name)
 
-    def __eq__(self, other: Self) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, BlockState):
+            return False
         return self.name == other.name and self.props == other.props
 
-    def clone(self) -> Self:
+    def clone(self) -> BlockState:
         return BlockState(self.name, self.props.copy())
 
 
 class BiomeRegion(ComponentBase):
 
     _parent: ComponentBase | None
-    _is_dirty: bool
+    is_dirty: bool
     _dirty_children: set[ComponentBase]
 
     _biome: Biome
@@ -143,7 +149,7 @@ class BiomeRegion(ComponentBase):
         return f'BiomeRegion({self._biome})'
 
     def set_biome(self, biome: Biome | str) -> None:
-        self._is_dirty = True
+        self.is_dirty = True
         if isinstance(biome, Biome):
             self._biome = biome
         else:
@@ -167,57 +173,71 @@ class Biome:
     def __hash__(self) -> int:
         return hash(self.name)
 
-    def __eq__(self, other: Self) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Biome):
+            return False
         return self.name == other.name
 
-    def clone(self) -> Self:
+    def clone(self) -> Biome:
         return Biome(self.name)
 
 
 class ChunkSection(ComponentBase):
-    def __init__(self, raw_section, y_index, blocks: dict[int, Block] = None, biome_regions: dict[int, BiomeRegion] = None, parent_chunk: 'Chunk' = None):
+
+    _parent: Chunk | None
+    is_dirty: bool
+    _dirty_children: set[ComponentBase]
+
+    __blocks: dict[int, Block]
+    __biome_regions: dict[int, BiomeRegion]
+    raw_section: BaseTag
+    y_index: int
+
+    def __init__(
+        self,
+        raw_section: BaseTag,
+        y_index: int,
+        blocks: dict[int, Block] | None = None,
+        biome_regions: dict[int, BiomeRegion] | None = None,
+        parent_chunk: Chunk | None = None
+    ) -> None:
         super().__init__(parent=parent_chunk)
 
-        if blocks is None:
-            blocks = dict()
-        self.__blocks: dict[int, Block] = blocks
+        blocks = {} if blocks is None else blocks
+        self.__blocks = blocks
 
-        if biome_regions is None:
-            biome_regions = dict()
-        self.__biome_regions: dict[int, BiomeRegion] = biome_regions
+        biome_regions = {} if biome_regions is None else biome_regions
+        self.__biome_regions = biome_regions
 
         self.raw_section = raw_section
         self.y_index = y_index
 
-    def get_block(self, block_pos):
-        x = block_pos[0]
-        y = block_pos[1]
-        z = block_pos[2]
+    def get_block(self, block_pos: AbsoluteCoordinate):
+        x = block_pos.x
+        y = block_pos.y
+        z = block_pos.z
 
         return self.__blocks[x + z * Sizes.SUBCHUNK_WIDTH + y * Sizes.SUBCHUNK_WIDTH ** 2]
 
-    def set_blocks(self, blocks: dict[int, Block]):
-        if blocks is not None:
-            self.__blocks = blocks
-        else:
-            self.__blocks = dict()
+    def set_blocks(self, blocks: dict[int, Block] | None):
+        self.__blocks = {} if blocks is None else blocks
 
-    def get_biome(self, biome_pos):
-        x = biome_pos[0]
-        y = biome_pos[1]
-        z = biome_pos[2]
+    def get_biome(self, biome_pos: BiomeCoordinate):
+        x = biome_pos.x
+        y = biome_pos.y
+        z = biome_pos.z
 
         biome_region_count = Sizes.SUBCHUNK_WIDTH // Sizes.BIOME_REGION_WIDTH
         return self.__biome_regions[x + z * biome_region_count + y * biome_region_count ** 2]
 
-    def set_biome_regions(self, biome_regions: dict[int, Biome]):
-        if biome_regions is not None:
-            self.__biome_regions = biome_regions
-        else:
-            self.__biome_regions = dict()
+    def set_biome_regions(self, biome_regions: dict[int, BiomeRegion] | None):
+        self.__biome_regions = {} if biome_regions is None else biome_regions
 
     @staticmethod
-    def from_nbt(section_nbt, parent_chunk=None) -> 'ChunkSection':
+    def from_nbt(
+        section_nbt: BaseTag,
+        parent_chunk: Chunk | None = None,
+    ) -> ChunkSection:
         states_palette = [
             BlockState(
                 state.get('Name').get(),
@@ -410,7 +430,7 @@ class ChunkSection(ComponentBase):
 
 
 class Chunk(ComponentBase):
-    def __init__(self, coord: ChunkCoordinate, sections: dict[int, ChunkSection], raw_nbt, orig_size, parent_region: 'Region' = None):
+    def __init__(self, coord: ChunkCoordinate, sections: dict[int, ChunkSection], raw_nbt, orig_size, parent_region: Region = None):
         super().__init__(parent=parent_region)
         self.coordinate = coord
         self.sections: dict[int, ChunkSection] = sections
@@ -420,11 +440,11 @@ class Chunk(ComponentBase):
         for section in self.sections.values():
             section.set_parent(self)
 
-    def set_parent_region(self, region: 'Region'):
+    def set_parent_region(self, region: Region):
         self._parent = region
 
     @staticmethod
-    def from_file(file: BinaryIO, offset: int, sections: int, parent_region: 'Region' = None) -> 'Chunk':
+    def from_file(file: BinaryIO, offset: int, sections: int, parent_region: Region = None) -> 'Chunk':
         file.seek(offset)
         datalen = int.from_bytes(file.read(4), byteorder="big", signed=False)
         file.read(1)  # Compression scheme
@@ -453,9 +473,11 @@ class Chunk(ComponentBase):
     def get_block(self, block_pos: AbsoluteCoordinate):
         coords = [block_pos.x, block_pos.y, block_pos.z]
         return self.get_section(block_pos.y).get_block(
-            [
-                n % Sizes.SUBCHUNK_WIDTH for n in coords
-            ]
+            AbsoluteCoordinate(
+                block_pos.x % Sizes.SUBCHUNK_WIDTH,
+                block_pos.y % Sizes.SUBCHUNK_WIDTH,
+                block_pos.z % Sizes.SUBCHUNK_WIDTH,
+            )
         )
 
     def get_section(self, y) -> ChunkSection:
@@ -493,7 +515,7 @@ class Chunk(ComponentBase):
     # Blockstates are packed based on the number of values in the pallet.
     # This selects the pack size, then splits out the ids
     @staticmethod
-    def __unpack_sections(raw_nbt):
+    def __unpack_sections(raw_nbt: BaseTag):
         sections = {}
         for section in raw_nbt.get('sections').children:
             sections[section.get('Y').get()] = ChunkSection.from_nbt(section)
@@ -613,7 +635,7 @@ class Region(ComponentBase):
 
         self.file.write((0).to_bytes(required_padding, byteorder='big', signed=False))
 
-        self._is_dirty = False
+        self.is_dirty = False
 
     def __write_header(self, file: BinaryIO):
         for c_loc in self.__chunk_locations:
