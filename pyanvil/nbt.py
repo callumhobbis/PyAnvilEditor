@@ -23,7 +23,7 @@ class TagType(IntEnum):
 
 class BaseTag(ABC):
 
-    clazz_id: ClassVar[TagType]
+    class_id: ClassVar[TagType]
 
     tag_name: str
 
@@ -51,10 +51,10 @@ class BaseTag(ABC):
 
 class BaseDataTag(BaseTag):
 
-    clazz_width: ClassVar[int]
-    clazz_name: ClassVar[str]
-    clazz_parser: ClassVar[str | bytes]
-    clazz_id: ClassVar[TagType]
+    class_width: ClassVar[int]
+    class_name: ClassVar[str]
+    class_parser: ClassVar[str | bytes]
+    class_id: ClassVar[TagType]
 
     tag_name: str
     tag_value: float
@@ -63,8 +63,8 @@ class BaseDataTag(BaseTag):
     def parse(cls, stream: InputStream, name: str) -> Self:
         return cls(
             tag_value=struct.unpack(
-                cls.clazz_parser,
-                stream.read(cls.clazz_width)
+                cls.class_parser,
+                stream.read(cls.class_width)
             )[0],
             tag_name=name
         )
@@ -92,16 +92,16 @@ class BaseDataTag(BaseTag):
         include_name: bool = True,
     ) -> None:
         if include_name:
-            stream.write(type(self).clazz_id.to_bytes(1))
+            stream.write(type(self).class_id.to_bytes(1))
             NBT.write_string(stream, self.tag_name)
 
-        stream.write(struct.pack(type(self).clazz_parser, self.tag_value))
+        stream.write(struct.pack(type(self).class_parser, self.tag_value))
 
     def clone(self) -> Self:
         return type(self)(self.tag_value, tag_name=self.tag_name)
 
     def __repr__(self) -> str:
-        return f"{type(self).clazz_name}Tag '{self.tag_name}' = {str(self.tag_value)}"
+        return f"{type(self).class_name}Tag '{self.tag_name}' = {str(self.tag_value)}"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, BaseDataTag):
@@ -110,50 +110,50 @@ class BaseDataTag(BaseTag):
 
 
 class ByteTag(BaseDataTag):
-    clazz_width = 1
-    clazz_name = 'Byte'
-    clazz_parser = '>b'
-    clazz_id = TagType.BYTE
+    class_width = 1
+    class_name = 'Byte'
+    class_parser = '>b'
+    class_id = TagType.BYTE
 
 
 class ShortTag(BaseDataTag):
-    clazz_width = 2
-    clazz_name = 'Short'
-    clazz_parser = '>h'
-    clazz_id = TagType.SHORT
+    class_width = 2
+    class_name = 'Short'
+    class_parser = '>h'
+    class_id = TagType.SHORT
 
 
 class IntTag(BaseDataTag):
-    clazz_width = 4
-    clazz_name = 'Int'
-    clazz_parser = '>i'
-    clazz_id = TagType.INT
+    class_width = 4
+    class_name = 'Int'
+    class_parser = '>i'
+    class_id = TagType.INT
 
 
 class LongTag(BaseDataTag):
-    clazz_width = 8
-    clazz_name = 'Long'
-    clazz_parser = '>q'
-    clazz_id = TagType.LONG
+    class_width = 8
+    class_name = 'Long'
+    class_parser = '>q'
+    class_id = TagType.LONG
 
 
 class FloatTag(BaseDataTag):
-    clazz_width = 4
-    clazz_name = 'Float'
-    clazz_parser = '>f'
-    clazz_id = TagType.FLOAT
+    class_width = 4
+    class_name = 'Float'
+    class_parser = '>f'
+    class_id = TagType.FLOAT
 
 
 class DoubleTag(BaseDataTag):
-    clazz_width = 8
-    clazz_name = 'Double'
-    clazz_parser = '>d'
-    clazz_id = TagType.DOUBLE
+    class_width = 8
+    class_name = 'Double'
+    class_parser = '>d'
+    class_id = TagType.DOUBLE
 
 
 class StringTag(BaseTag):
 
-    clazz_id: ClassVar[TagType] = TagType.STRING
+    class_id: ClassVar[TagType] = TagType.STRING
     tag_name: str
     tag_value: str
 
@@ -182,7 +182,7 @@ class StringTag(BaseTag):
         include_name: bool = True,
     ) -> None:
         if include_name:
-            stream.write(type(self).clazz_id.to_bytes(1))
+            stream.write(type(self).class_id.to_bytes(1))
             NBT.write_string(stream, self.tag_name)
 
         stream.write(len(self.tag_value).to_bytes(2))
@@ -203,9 +203,9 @@ class StringTag(BaseTag):
 
 class BaseArrayTag(BaseTag):
 
-    clazz_sub_type: ClassVar[type[BaseDataTag]]
-    clazz_name: ClassVar[str]
-    clazz_id: ClassVar[TagType]
+    class_sub_type: ClassVar[type[BaseDataTag]]
+    class_name: ClassVar[str]
+    class_id: ClassVar[TagType]
 
     tag_name: str
     children: list[BaseDataTag]
@@ -215,7 +215,7 @@ class BaseArrayTag(BaseTag):
         payload_length = int.from_bytes(stream.read(4), signed=True)
         tag = cls(tag_name=name)
         for i in range(payload_length):
-            tag.add_child(cls.clazz_sub_type.parse(stream, 'None'))
+            tag.add_child(cls.class_sub_type.parse(stream, 'None'))
         return tag
 
     def __init__(
@@ -234,7 +234,7 @@ class BaseArrayTag(BaseTag):
 
     def print(self, indent: str = '') -> None:
         str_dat = ', '.join([str(c.get()) for c in self.children])
-        print(f'{indent}{type(self).clazz_name}: {self.tag_name} size {str(len(self.children))} = [{str_dat}]')
+        print(f'{indent}{type(self).class_name}: {self.tag_name} size {str(len(self.children))} = [{str_dat}]')
 
     def get(self) -> list[int]:
         return [int(c.get()) for c in self.children]
@@ -248,7 +248,7 @@ class BaseArrayTag(BaseTag):
         include_name: bool = True,
     ) -> None:
         if include_name:
-            stream.write(type(self).clazz_id.to_bytes(1))
+            stream.write(type(self).class_id.to_bytes(1))
             NBT.write_string(stream, self.tag_name)
 
         stream.write(len(self.children).to_bytes(4, signed=True))
@@ -261,7 +261,7 @@ class BaseArrayTag(BaseTag):
 
     def __repr__(self) -> str:
         str_dat = ', '.join([str(c.get()) for c in self.children])
-        return f'{type(self).clazz_name}: {self.tag_name} size {str(len(self.children))} = [{str_dat}]'
+        return f'{type(self).class_name}: {self.tag_name} size {str(len(self.children))} = [{str_dat}]'
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, BaseArrayTag):
@@ -277,26 +277,26 @@ class BaseArrayTag(BaseTag):
 
 
 class ByteArrayTag(BaseArrayTag):
-    clazz_sub_type = ByteTag
-    clazz_name = 'ByteArray'
-    clazz_id = TagType.BYTE_ARRAY
+    class_sub_type = ByteTag
+    class_name = 'ByteArray'
+    class_id = TagType.BYTE_ARRAY
 
 
 class IntArrayTag(BaseArrayTag):
-    clazz_sub_type = IntTag
-    clazz_name = 'IntArray'
-    clazz_id = TagType.INT_ARRAY
+    class_sub_type = IntTag
+    class_name = 'IntArray'
+    class_id = TagType.INT_ARRAY
 
 
 class LongArrayTag(BaseArrayTag):
-    clazz_sub_type = LongTag
-    clazz_name = 'LongArray'
-    clazz_id = TagType.LONG_ARRAY
+    class_sub_type = LongTag
+    class_name = 'LongArray'
+    class_id = TagType.LONG_ARRAY
 
 
 class ListTag(BaseTag):
 
-    clazz_id: ClassVar[TagType] = TagType.LIST
+    class_id: ClassVar[TagType] = TagType.LIST
 
     tag_name: str
     sub_type_id: int
@@ -344,7 +344,7 @@ class ListTag(BaseTag):
         include_name: bool = True,
     ) -> None:
         if include_name:
-            stream.write(type(self).clazz_id.to_bytes(1))
+            stream.write(type(self).class_id.to_bytes(1))
             NBT.write_string(stream, self.tag_name)
 
         stream.write(self.sub_type_id.to_bytes(1))
@@ -378,7 +378,7 @@ class ListTag(BaseTag):
 
 class CompoundTag(BaseTag):
 
-    clazz_id: ClassVar[TagType] = TagType.COMPOUND
+    class_id: ClassVar[TagType] = TagType.COMPOUND
 
     tag_name: str
     children: dict[str, BaseTag]
@@ -431,7 +431,7 @@ class CompoundTag(BaseTag):
 
     def serialize(self, stream: OutputStream, include_name: bool = True) -> None:
         if include_name:
-            stream.write(type(self).clazz_id.to_bytes(1))
+            stream.write(type(self).class_id.to_bytes(1))
             NBT.write_string(stream, self.tag_name)
 
         for tag_name in self.children:
@@ -471,8 +471,8 @@ class NBT:
             stream.write(ord(c).to_bytes(1))
 
     @staticmethod
-    def register_parser(id: int, clazz: type[BaseTag]) -> None:
-        NBT._parsers[id] = clazz
+    def register_parser(id: int, class_: type[BaseTag]) -> None:
+        NBT._parsers[id] = class_
 
 
     @staticmethod
@@ -489,4 +489,4 @@ tag_classes: list[type[BaseTag]] = [
     ByteArrayTag, IntArrayTag, LongArrayTag, ListTag, CompoundTag
 ]
 for tag_class in tag_classes:
-    NBT.register_parser(tag_class.clazz_id, tag_class)
+    NBT.register_parser(tag_class.class_id, tag_class)

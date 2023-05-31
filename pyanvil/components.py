@@ -310,7 +310,7 @@ class ChunkSection(ComponentBase):
         return serial_section
 
     def _serialize_states_palette(self):
-        serial_palette = ListTag(CompoundTag.clazz_id, tag_name='palette')
+        serial_palette = ListTag(CompoundTag.class_id, tag_name='palette')
         for state in self.states_palette:
             palette_item = CompoundTag(tag_name='None', children=[
                 StringTag(state.name, tag_name='Name')
@@ -357,7 +357,7 @@ class ChunkSection(ComponentBase):
         return serial_blockstates
 
     def _serialize_biomes_palette(self):
-        serial_palette = ListTag(StringTag.clazz_id, tag_name='palette')
+        serial_palette = ListTag(StringTag.class_id, tag_name='palette')
         for biome in self.biomes_palette:
             serial_palette.add_child(StringTag(biome.name, tag_name='Name'))
         return serial_palette
@@ -522,8 +522,8 @@ class Chunk(ComponentBase):
         return sections
 
     def pack(self):
-        new_sections: ListTag = ListTag(
-            CompoundTag.clazz_id,
+        new_sections = ListTag(
+            CompoundTag.class_id,
             tag_name='sections',
             children=[sec.serialize() for sec in self.sections.values()]
         )

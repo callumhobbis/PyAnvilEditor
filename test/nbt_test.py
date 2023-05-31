@@ -12,10 +12,10 @@ def build_simple_nbt_tag_test(clz, test_val, test_bin):
             stream = OutputStream()
             tag.serialize(stream, include_name=True)
             binary_tag = list(stream.get_data())
-            expected_tag = [clz.clazz_id, 0, 4] + \
+            expected_tag = [clz.class_id, 0, 4] + \
                 list(b'Test') + \
                 test_bin
-            assert binary_tag == expected_tag, f'Tag {clz.clazz_name}'
+            assert binary_tag == expected_tag, f'Tag {clz.class_name}'
 
         def test_serializing_without_name(args):
             tag = clz(test_val, tag_name='Test')
@@ -23,15 +23,15 @@ def build_simple_nbt_tag_test(clz, test_val, test_bin):
             tag.serialize(stream, include_name=False)
             binary_tag = list(stream.get_data())
             expected_tag = test_bin
-            assert binary_tag == expected_tag, f'Tag {clz.clazz_name}'
+            assert binary_tag == expected_tag, f'Tag {clz.class_name}'
 
         def test_deserializing(args):
-            raw_tag = InputStream(bytearray([clz.clazz_id, 0, 4] +
+            raw_tag = InputStream(bytearray([clz.class_id, 0, 4] +
                                             list(b'Test') +
                                             test_bin))
             parsed_tag = NBT.parse_nbt(raw_tag)
             expected_tag = clz(test_val, tag_name='Test')
-            assert parsed_tag == expected_tag, f'Tag {clz.clazz_name}'
+            assert parsed_tag == expected_tag, f'Tag {clz.class_name}'
 
     return TestSimpleNBTTag
 
@@ -40,27 +40,27 @@ def build_array_nbt_tag_test(clz, test_vals, test_bins):
     class TestArrayNBTTag:
         def test_serializing(args):
             tag = clz('Test', children=[
-                clz.clazz_sub_type(v) for v in test_vals
+                clz.class_sub_type(v) for v in test_vals
             ])
             stream = OutputStream()
             tag.serialize(stream, include_name=True)
             binary_tag = list(stream.get_data())
-            expected_tag = [clz.clazz_id, 0, 4] + \
+            expected_tag = [clz.class_id, 0, 4] + \
                 list(b'Test') + \
                 [0, 0, 0, len(test_vals)] +\
                 [b for sublist in test_bins for b in sublist]
-            assert binary_tag == expected_tag, f'Tag {clz.clazz_name}'
+            assert binary_tag == expected_tag, f'Tag {clz.class_name}'
 
         def test_deserializing(args):
-            raw_tag = InputStream(bytearray([clz.clazz_id, 0, 4] +
+            raw_tag = InputStream(bytearray([clz.class_id, 0, 4] +
                                             list(b'Test') +
                                             [0, 0, 0, len(test_vals)] +
                                             [b for sublist in test_bins for b in sublist]))
             parsed_tag = NBT.parse_nbt(raw_tag)
             expected_tag = clz('Test', children=[
-                clz.clazz_sub_type(v) for v in test_vals
+                clz.class_sub_type(v) for v in test_vals
             ])
-            assert parsed_tag == expected_tag, f'Tag {clz.clazz_name}'
+            assert parsed_tag == expected_tag, f'Tag {clz.class_name}'
 
     return TestArrayNBTTag
 
@@ -101,7 +101,7 @@ class TestStringTag:
 
 class TestListNBTTag:
     def test_serializing_simple_data(args):
-        tag = ListTag(FloatTag.clazz_id, tag_name='Test', children=[
+        tag = ListTag(FloatTag.class_id, tag_name='Test', children=[
             FloatTag(1.5),
             FloatTag(11.15)
         ])
@@ -121,16 +121,16 @@ class TestListNBTTag:
                                         [5, 0, 0, 0, 2] +
                                         [63, 192, 0, 0, 65, 50, 102, 102]))
         parsed_tag = NBT.parse_nbt(raw_tag)
-        tag = ListTag(FloatTag.clazz_id, tag_name='Test', children=[
+        tag = ListTag(FloatTag.class_id, tag_name='Test', children=[
             FloatTag(1.5),
             FloatTag(11.149999618530273)  # float pack error
         ])
         assert parsed_tag == tag, 'Tag ListTag with FloatTag elements'
 
     def test_serializing_list_data(args):
-        tag = ListTag(ListTag.clazz_id, tag_name='Test', children=[
-            ListTag(ByteTag.clazz_id, children=[ByteTag(25), ByteTag(31)]),
-            ListTag(FloatTag.clazz_id, children=[FloatTag(1.5)])
+        tag = ListTag(ListTag.class_id, tag_name='Test', children=[
+            ListTag(ByteTag.class_id, children=[ByteTag(25), ByteTag(31)]),
+            ListTag(FloatTag.class_id, children=[FloatTag(1.5)])
         ])
         stream = OutputStream()
         tag.serialize(stream, include_name=True)
@@ -155,14 +155,14 @@ class TestListNBTTag:
                                         [5, 0, 0, 0, 1] +
                                         [63, 192, 0, 0]))
         parsed_tag = NBT.parse_nbt(raw_tag)
-        tag = ListTag(ListTag.clazz_id, tag_name='Test', children=[
-            ListTag(ByteTag.clazz_id, children=[ByteTag(25), ByteTag(31)]),
-            ListTag(FloatTag.clazz_id, children=[FloatTag(1.5)])
+        tag = ListTag(ListTag.class_id, tag_name='Test', children=[
+            ListTag(ByteTag.class_id, children=[ByteTag(25), ByteTag(31)]),
+            ListTag(FloatTag.class_id, children=[FloatTag(1.5)])
         ])
         assert parsed_tag == tag, 'Tag ListTag with ListTag elements'
 
     def test_serializing_compound_data(args):
-        tag = ListTag(CompoundTag.clazz_id, tag_name='Test', children=[
+        tag = ListTag(CompoundTag.class_id, tag_name='Test', children=[
             CompoundTag(children=[ByteTag(25, tag_name='dp1'), ByteTag(31, tag_name='dp2')]),
             CompoundTag(children=[ByteTag(25, tag_name='dp3'), ByteTag(31, tag_name='dp4')])
         ])
@@ -188,7 +188,7 @@ class TestListNBTTag:
                                         [1, 0, 3, ] + list(b'dp3') + [25] +
                                         [1, 0, 3, ] + list(b'dp4') + [31, 0]))
         parsed_tag = NBT.parse_nbt(raw_tag)
-        tag = ListTag(CompoundTag.clazz_id, tag_name='Test', children=[
+        tag = ListTag(CompoundTag.class_id, tag_name='Test', children=[
             CompoundTag(children=[ByteTag(25, tag_name='dp1'), ByteTag(31, tag_name='dp2')]),
             CompoundTag(children=[ByteTag(25, tag_name='dp3'), ByteTag(31, tag_name='dp4')])
         ])
@@ -200,7 +200,7 @@ class TestCompoundNBTTag:
         tag = CompoundTag(tag_name='Test', children=[
             ByteTag(25, tag_name='dp1'),
             FloatTag(1.5, tag_name='dp2'),
-            ListTag(ByteTag.clazz_id, tag_name='dp3', children=[
+            ListTag(ByteTag.class_id, tag_name='dp3', children=[
                 ByteTag(35)
             ]),
             CompoundTag(tag_name='dp4', children=[
@@ -236,7 +236,7 @@ class TestCompoundNBTTag:
         tag = CompoundTag(tag_name='Test', children=[
             ByteTag(25, tag_name='dp1'),
             FloatTag(1.5, tag_name='dp2'),
-            ListTag(ByteTag.clazz_id, tag_name='dp3', children=[
+            ListTag(ByteTag.class_id, tag_name='dp3', children=[
                 ByteTag(35)
             ]),
             CompoundTag(tag_name='dp4', children=[
