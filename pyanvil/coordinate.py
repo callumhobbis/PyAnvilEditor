@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 
 
@@ -34,6 +36,9 @@ class AbsoluteCoordinate(Coordinate):
 
     def __hash__(self) -> int:
         return hash((self.x, self.y, self.z))
+
+    def __add__(self, other: AbsoluteCoordinate) -> AbsoluteCoordinate:
+        return AbsoluteCoordinate(self.x + other.x, self.y + other.y, self.z + other.z)
 
     def to_absolute_coordinate(self) -> 'AbsoluteCoordinate':
         return self
