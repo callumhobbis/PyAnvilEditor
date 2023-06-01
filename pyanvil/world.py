@@ -5,7 +5,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
-from pyanvil.components import Block, Chunk, Region
+from pyanvil.components import Block, BlockState, Chunk, Region
 from pyanvil.coordinate import AbsoluteCoordinate, ChunkCoordinate, RegionCoordinate
 
 
@@ -91,13 +91,18 @@ class WorldTask:
 
 class Canvas:
 
-    def __init__(self, world: 'World', auto_commit: bool = True):
-        self.world: 'World' = world
-        self.work_queue: list[WorldTask] = []
-        self.auto_commit: bool = auto_commit
+    world: World
+    work_queue: list[WorldTask]
+    auto_commit: bool
+    selection: set[AbsoluteCoordinate]
+
+    def __init__(self, world: World, auto_commit: bool = True) -> None:
+        self.world = world
+        self.work_queue = []
+        self.auto_commit = auto_commit
         self.selection = set()
 
-    def fill(self, state):
+    def fill(self, state: BlockState) -> None:
         my_state = state.clone()
         for b in list(self.selection):
             self.work_queue.append(WorldTask(b, my_state))
@@ -107,43 +112,58 @@ class Canvas:
         if self.auto_commit:
             self.commit()
 
-    def deselect(self):
+    def deselect(self) -> None:
         self.selection.clear()
 
-    def copy(self):
+    def copy(self) -> Schematic:
         min_x = min((loc.x for loc in self.selection))
         min_y = min((loc.y for loc in self.selection))
         min_z = min((loc.z for loc in self.selection))
         print(min_x, min_y, min_z)
+
         new_schem = Schematic({
             AbsoluteCoordinate(loc.x - min_x, loc.y - min_y, loc.z - min_z): self.world.get_block(loc).get_state() for loc in self.selection
         })
         self.deselect()
         return new_schem
 
-    def commit(self):
-        region_work = {}
+    def commit(self) -> None:
+        region_work: dict[Region, list[WorldTask]] = {}
         for task in self.work_queue:
-            chunk_cords = self.world._get_chunk(task.location)
-            region_cords = self.world._get_region_file(chunk_cords)
-            if region_cords not in region_work:
-                region_work[region_cords] = []
-            region_work[region_cords].append(task)
+            chunk = self.world.get_chunk(task.location)
+            region_coord = chunk.coordinate.to_region_coordinate()
+            region = self.world.get_region(region_coord)
+            if region not in region_work:
+                region_work[region] = []
+            region_work[region].append(task)
 
-        for chunk, work in region_work.items():
+        for work in region_work.values():
             for task in work:
                 self.world.get_block(task.location).set_state(task.new_state)
             self.world.flush()
 
-    def select_rectangle(self, p1: AbsoluteCoordinate, p2: AbsoluteCoordinate):
+    def select_rectangle(
+        self,
+        p1: AbsoluteCoordinate,
+        p2: AbsoluteCoordinate
+    ) -> Self:
         self._rect(p1, p2, True)
         return self
 
-    def deselect_rectangle(self, p1: AbsoluteCoordinate, p2: AbsoluteCoordinate):
+    def deselect_rectangle(
+        self,
+        p1: AbsoluteCoordinate,
+        p2: AbsoluteCoordinate,
+    ) -> Self:
         self._rect(p1, p2, False)
         return self
 
-    def _rect(self, p1: AbsoluteCoordinate, p2: AbsoluteCoordinate, select: bool):
+    def _rect(
+        self,
+        p1: AbsoluteCoordinate,
+        p2: AbsoluteCoordinate,
+        select: bool,
+    ) -> None:
         for x in range(p1.x, p2.x + 1):
             for y in range(p1.y, p2.y + 1):
                 for z in range(p1.z, p2.z + 1):
@@ -172,7 +192,8 @@ class Canvas:
     #                 else:
     #                     self.selection.remove(loc)
 
-    def _dist(loc1: AbsoluteCoordinate, loc2: AbsoluteCoordinate):
+    @staticmethod
+    def _dist(loc1: AbsoluteCoordinate, loc2: AbsoluteCoordinate) -> float:
         dx = abs(loc1.x - loc2.x) ** 2
         dy = abs(loc1.y - loc2.y) ** 2
         dz = abs(loc1.z - loc2.z) ** 2
@@ -182,10 +203,12 @@ class Canvas:
 
 class Schematic:
 
-    def __init__(self, state_map):
+    state_map: dict[AbsoluteCoordinate, BlockState]
+
+    def __init__(self, state_map: dict[AbsoluteCoordinate, BlockState]) -> None:
         self.state_map = state_map
 
-    def paste(self, world: World, corner: AbsoluteCoordinate):
+    def paste(self, world: World, corner: AbsoluteCoordinate) -> None:
         for loc, state in self.state_map.items():
-            shift_loc = (loc.x + corner.x, loc.y + corner.y, loc.z + corner.z)
+            shift_loc = loc + corner
             world.get_block(shift_loc).set_state(state)
