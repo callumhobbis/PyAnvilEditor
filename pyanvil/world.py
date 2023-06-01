@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from pathlib import Path
 from types import TracebackType
 from typing import Self
@@ -191,14 +190,6 @@ class Canvas:
     #                     self.selection.add(loc)
     #                 else:
     #                     self.selection.remove(loc)
-
-    @staticmethod
-    def _dist(loc1: AbsoluteCoordinate, loc2: AbsoluteCoordinate) -> float:
-        dx = abs(loc1.x - loc2.x) ** 2
-        dy = abs(loc1.y - loc2.y) ** 2
-        dz = abs(loc1.z - loc2.z) ** 2
-
-        return math.sqrt(dx + dy + dz)
 
 
 class Schematic:

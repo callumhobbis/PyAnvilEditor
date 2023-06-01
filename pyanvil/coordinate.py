@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import math
 
 
 class Coordinate(ABC):
@@ -39,6 +40,13 @@ class AbsoluteCoordinate(Coordinate):
 
     def __add__(self, other: AbsoluteCoordinate) -> AbsoluteCoordinate:
         return AbsoluteCoordinate(self.x + other.x, self.y + other.y, self.z + other.z)
+
+    def __sub__(self, other: AbsoluteCoordinate) -> AbsoluteCoordinate:
+        return AbsoluteCoordinate(self.x - other.x, self.y - other.y, self.z - other.z)
+
+    def dist(self, other: AbsoluteCoordinate) -> float:
+        delta = self - other
+        return math.sqrt(delta.x + delta.y + delta.z)
 
     def to_absolute_coordinate(self) -> 'AbsoluteCoordinate':
         return self
