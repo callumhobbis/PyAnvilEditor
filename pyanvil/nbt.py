@@ -474,7 +474,6 @@ class NBT:
     def register_parser(id: int, class_: type[BaseTag]) -> None:
         NBT._parsers[id] = class_
 
-
     @staticmethod
     def parse_nbt(stream: InputStream) -> BaseTag:
         tag_type = int.from_bytes(stream.read(1))

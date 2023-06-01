@@ -1,15 +1,17 @@
 from __future__ import annotations
+import io
 
 import math
 import logging
 import sys
+from types import TracebackType
 import zlib
 from abc import ABC
 from enum import IntEnum
 from io import FileIO
 from pathlib import Path
 from time import time
-from typing import Self, BinaryIO, Union
+from typing import Generator, Self, BinaryIO, Union
 
 from pyanvil.coordinate import AbsoluteCoordinate, BiomeCoordinate, ChunkCoordinate
 from pyanvil.nbt import NBT, BaseTag, ByteArrayTag, ByteTag, CompoundTag, StringTag, LongArrayTag, LongTag, ListTag
@@ -190,12 +192,14 @@ class ChunkSection(ComponentBase):
 
     __blocks: dict[int, Block]
     __biome_regions: dict[int, BiomeRegion]
-    raw_section: BaseTag
+    raw_section: CompoundTag
     y_index: int
+    states_palette: list[BlockState]
+    biomes_palette: list[Biome]
 
     def __init__(
         self,
-        raw_section: BaseTag,
+        raw_section: CompoundTag,
         y_index: int,
         blocks: dict[int, Block] | None = None,
         biome_regions: dict[int, BiomeRegion] | None = None,
@@ -235,7 +239,7 @@ class ChunkSection(ComponentBase):
 
     @staticmethod
     def from_nbt(
-        section_nbt: BaseTag,
+        section_nbt: CompoundTag,
         parent_chunk: Chunk | None = None,
     ) -> ChunkSection:
         states_palette = [
@@ -245,11 +249,11 @@ class ChunkSection(ComponentBase):
             ) for state in section_nbt['block_states']['palette']
         ]
         if len(states_palette) == 1:
-            states = [0] * 16**3
+            state_indexes = [0] * 16**3
         else:
             flatstates = [c.get() for c in section_nbt['block_states']['data']]
             pack_size = max(4, (len(states_palette) - 1).bit_length())
-            states = [
+            state_indexes = [
                 ChunkSection._read_width_from_loc(flatstates, pack_size, i) for i in range(Sizes.SUBCHUNK_WIDTH ** 3)
             ]
 
@@ -257,8 +261,8 @@ class ChunkSection(ComponentBase):
         sky_lights = ChunkSection._divide_nibbles(section_nbt['SkyLight'].get()) if 'SkyLight' in section_nbt else None
         section = ChunkSection(section_nbt, section_nbt['Y'].get(), parent_chunk=parent_chunk)
         blocks: dict[int, Block] = dict()
-        for i, state in enumerate(states):
-            state = states_palette[state]
+        for i, state_index in enumerate(state_indexes):
+            state = states_palette[state_index]
             block_light = block_lights[i] if block_lights else 0
             sky_light = sky_lights[i] if sky_lights else 0
             blocks[i] = Block(state=state, block_light=block_light, sky_light=sky_light, parent_chunk_section=section)
@@ -270,21 +274,21 @@ class ChunkSection(ComponentBase):
             ) for biome in section_nbt['biomes']['palette']
         ]
         if len(biomes_palette) == 1:
-            biomes = [0] * 16**3
+            biome_indexes = [0] * 16**3
         else:
             flatbiomes = [c.get() for c in section_nbt['biomes']['data']]
             pack_size = (len(biomes_palette) - 1).bit_length()
-            biomes = ChunkSection._read_width_from_loc(flatbiomes, pack_size, (Sizes.SUBCHUNK_WIDTH//Sizes.BIOME_REGION_WIDTH)**3)
+            biome_indexes = ChunkSection._read_width_from_loc(flatbiomes, pack_size, (Sizes.SUBCHUNK_WIDTH//Sizes.BIOME_REGION_WIDTH)**3)
 
         biome_regions: dict[int, BiomeRegion] = dict()
-        for i, biome in enumerate(biomes):
-            biome = biomes_palette[biome]
+        for i, biome_index in enumerate(biome_indexes):
+            biome = biomes_palette[biome_index]
             biome_regions[i] = BiomeRegion(biome=biome, parent_chunk_section=section)
         section.set_biome_regions(biome_regions=biome_regions)
 
         return section
 
-    def serialize(self):
+    def serialize(self) -> CompoundTag:
         serial_section = self.raw_section
         blocks_dirty = any((b.is_dirty for b in self.__blocks.values()))
         if blocks_dirty:
@@ -309,7 +313,7 @@ class ChunkSection(ComponentBase):
 
         return serial_section
 
-    def _serialize_states_palette(self):
+    def _serialize_states_palette(self) -> ListTag:
         serial_palette = ListTag(CompoundTag.class_id, tag_name='palette')
         for state in self.states_palette:
             palette_item = CompoundTag(tag_name='None', children=[
@@ -324,7 +328,10 @@ class ChunkSection(ComponentBase):
 
         return serial_palette
 
-    def _serialize_blockstates(self, state_mapping):
+    def _serialize_blockstates(
+        self,
+        state_mapping: dict[BlockState, int],
+    ) -> CompoundTag:
         serial_blockstates = CompoundTag(tag_name='block_states')
         serial_palette = self._serialize_states_palette()
         serial_blockstates.add_child(serial_palette)
@@ -356,13 +363,16 @@ class ChunkSection(ComponentBase):
         serial_blockstates.add_child(serial_data)
         return serial_blockstates
 
-    def _serialize_biomes_palette(self):
+    def _serialize_biomes_palette(self) -> ListTag:
         serial_palette = ListTag(StringTag.class_id, tag_name='palette')
         for biome in self.biomes_palette:
             serial_palette.add_child(StringTag(biome.name, tag_name='Name'))
         return serial_palette
 
-    def _serialize_biomes(self, biome_mapping):
+    def _serialize_biomes(
+        self,
+        biome_mapping: dict[Biome, int],
+    ) -> CompoundTag:
         serial_biomes = CompoundTag(tag_name='biomes')
         serial_palette = self._serialize_biomes_palette()
         serial_biomes.add_child(serial_palette)
@@ -393,7 +403,11 @@ class ChunkSection(ComponentBase):
         return serial_biomes
 
     @staticmethod
-    def _read_width_from_loc(long_list, width, position):
+    def _read_width_from_loc(
+        longs: list[int],
+        width: int,
+        position: int,
+    ) -> int:
         # max amount of blockstates that fit in each long
         states_per_long = 64 // width
 
@@ -401,11 +415,11 @@ class ChunkSection(ComponentBase):
         long_index = position // states_per_long
 
         # at which bit in the long this state is located
-        position_in_long = (position % states_per_long) * width
-        return ChunkSection._read_bits(long_list[long_index], width, position_in_long)
+        long_pos = (position % states_per_long) * width
+        return ChunkSection._read_bits(longs[long_index], width, long_pos)
 
     @staticmethod
-    def _read_bits(num, width: int, start: int):
+    def _read_bits(num: int, width: int, start: int) -> int:
         # create a mask of size 'width' of 1 bits
         mask = (2 ** width) - 1
         # shift it out to where we need for the mask
@@ -418,7 +432,7 @@ class ChunkSection(ComponentBase):
         return comp
 
     @staticmethod
-    def _divide_nibbles(arry):
+    def _divide_nibbles(arry: list[int]) -> list[int]:
         rtn = []
         f2_mask = (2 ** 4) - 1
         f1_mask = f2_mask << 4
@@ -430,31 +444,54 @@ class ChunkSection(ComponentBase):
 
 
 class Chunk(ComponentBase):
-    def __init__(self, coord: ChunkCoordinate, sections: dict[int, ChunkSection], raw_nbt, orig_size, parent_region: Region = None):
+
+    _parent: Region | None
+    is_dirty: bool
+    _dirty_children: set[ComponentBase]
+
+    coordinate: ChunkCoordinate
+    sections: dict[int, ChunkSection]
+    raw_nbt: CompoundTag
+    orig_size: int
+    __index: int
+
+    def __init__(
+        self,
+        coord: ChunkCoordinate,
+        sections: dict[int, ChunkSection],
+        raw_nbt: CompoundTag,
+        orig_size: int,
+        parent_region: Region | None = None,
+    ) -> None:
         super().__init__(parent=parent_region)
         self.coordinate = coord
-        self.sections: dict[int, ChunkSection] = sections
+        self.sections = sections
         self.raw_nbt = raw_nbt
         self.orig_size = orig_size
         self.__index = Chunk.to_region_chunk_index(coord)
         for section in self.sections.values():
             section.set_parent(self)
 
-    def set_parent_region(self, region: Region):
+    def set_parent_region(self, region: Region) -> None:
         self._parent = region
 
     @staticmethod
-    def from_file(file: BinaryIO, offset: int, sections: int, parent_region: Region = None) -> 'Chunk':
+    def from_file(
+        file: BinaryIO,
+        offset: int,
+        sections: int,
+        parent_region: Region | None = None,
+    ) -> Chunk:
         file.seek(offset)
         datalen = int.from_bytes(file.read(4))
         file.read(1)  # Compression scheme
         decompressed = zlib.decompress(file.read(datalen - 1))
-        data = NBT.parse_nbt(InputStream(decompressed))
+        data: CompoundTag = NBT.parse_nbt(InputStream(decompressed))
         x = data['xPos'].get()
         z = data['zPos'].get()
         return Chunk(ChunkCoordinate(x, z), Chunk.__unpack_sections(data), data, datalen, parent_region=parent_region)
 
-    def package_and_compress(self):
+    def package_and_compress(self) -> bytes:
         """Serialize and compress chunk to raw data"""
         stream = OutputStream()
         # Serialize and compress chunk
@@ -463,15 +500,14 @@ class Chunk(ComponentBase):
         return zlib.compress(stream.get_data())
 
     @property
-    def index(self):
+    def index(self) -> int:
         return self.__index
 
     @staticmethod
-    def to_region_chunk_index(coord: ChunkCoordinate):
+    def to_region_chunk_index(coord: ChunkCoordinate) -> int:
         return (coord.x % Sizes.REGION_WIDTH) + (coord.z % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH
 
-    def get_block(self, block_pos: AbsoluteCoordinate):
-        coords = [block_pos.x, block_pos.y, block_pos.z]
+    def get_block(self, block_pos: AbsoluteCoordinate) -> Block:
         return self.get_section(block_pos.y).get_block(
             AbsoluteCoordinate(
                 block_pos.x % Sizes.SUBCHUNK_WIDTH,
@@ -480,26 +516,26 @@ class Chunk(ComponentBase):
             )
         )
 
-    def get_section(self, y) -> ChunkSection:
+    def get_section(self, y: int) -> ChunkSection:
         key = int(y / Sizes.SUBCHUNK_WIDTH)
         if key not in self.sections:
             self.sections[key] = ChunkSection(
                 CompoundTag(),
                 key,
-                blocks=[Block(dirty=True) for i in range(Sizes.REGION_WIDTH**3)],
-                biome_regions=[BiomeRegion(dirty=True) for i in range((Sizes.REGION_WIDTH//Sizes.Biome_REGION_WIDTH)**3)],
+                blocks={i: Block(dirty=True) for i in range(Sizes.REGION_WIDTH**3)},
+                biome_regions={i: BiomeRegion(dirty=True) for i in range((Sizes.REGION_WIDTH//Sizes.BIOME_REGION_WIDTH)**3)},
                 parent_chunk=self
             )
         return self.sections[key]
 
-    def find_like(self, string) -> list[Block]:
+    def find_like(self, string) -> list[tuple[tuple[int, int, int], Block]]:
         results = []
         for sec in self.sections:
             section = self.sections[sec]
             for x1 in range(Sizes.SUBCHUNK_WIDTH):
                 for y1 in range(Sizes.SUBCHUNK_WIDTH):
                     for z1 in range(Sizes.SUBCHUNK_WIDTH):
-                        if string in section.get_block((x1, y1, z1))._state.name:
+                        if string in section.get_block(AbsoluteCoordinate(x1, y1, z1))._state.name:
                             results.append(
                                 (
                                     (
@@ -507,7 +543,7 @@ class Chunk(ComponentBase):
                                         y1 + sec * Sizes.SUBCHUNK_WIDTH,
                                         z1 + self.coordinate.z * Sizes.SUBCHUNK_WIDTH,
                                     ),
-                                    section.get_block((x1, y1, z1)),
+                                    section.get_block(AbsoluteCoordinate(x1, y1, z1)),
                                 )
                             )
         return results
@@ -515,13 +551,13 @@ class Chunk(ComponentBase):
     # Blockstates are packed based on the number of values in the pallet.
     # This selects the pack size, then splits out the ids
     @staticmethod
-    def __unpack_sections(raw_nbt: BaseTag):
+    def __unpack_sections(raw_nbt: BaseTag) -> dict[int, ChunkSection]:
         sections = {}
         for section in raw_nbt['sections']:
             sections[section['Y'].get()] = ChunkSection.from_nbt(section)
         return sections
 
-    def pack(self):
+    def pack(self) -> CompoundTag:
         new_sections = ListTag(
             CompoundTag.class_id,
             tag_name='sections',
@@ -532,57 +568,72 @@ class Chunk(ComponentBase):
 
         return new_nbt
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'Chunk({str(self.coordinate.x)},{str(self.coordinate.z)})'
 
 
 class Region(ComponentBase):
-    def __init__(self, region_file: Union[str, Path]):
+
+    _parent: None
+    is_dirty: bool
+    _dirty_children: set[ComponentBase]
+
+    file_path: str | Path
+    file: io.BufferedRandom | None
+    chunks: dict[int, Chunk]
+    __chunk_locations: list[list[int]] | None
+    __timestamps: list[int] | None
+    __chunk_location_data: bytes
+    __timestamps_data: bytes
+    __raw_chunk_data: dict[int, bytes]
+
+    def __init__(self, region_file: str | Path):
         super().__init__(parent=None)
         self.file_path = region_file
-        self.file: FileIO = None
+        self.file = None
         self.chunks: dict[int, Chunk] = {}
 
         # locations and timestamps are parallel lists.
         # Indexes in one can be accessed in the other as well.
-        self.__chunk_locations: list[list[int]] = None
-        self.__timestamps: list[int] = None
+        self.__chunk_locations = None
+        self.__timestamps = None
 
-        # Uninterpreted raw data
-        # Header
-        self.__chunk_location_data: bytes = None
-        self.__timestamps_data: bytes = None
         # Uninterpreted chunks mapped to their index
-        self.__raw_chunk_data: dict[int, bytes] = {}
+        self.__raw_chunk_data = {}
 
         self.__load_from_file()
 
-    def __enter__(self) -> 'Region':
+    def __enter__(self) -> Region:
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         if self.is_dirty:
             self.save()
         if self.file:
             self.file.close()
 
-    def __load_from_file(self):
+    def __load_from_file(self) -> None:
         self.__ensure_file_open()
         # 8KiB header. 4KiB chunk location table, 4KiB timestamp table
         self.__chunk_location_data = self.file.read(4 * 1024)
         self.__timestamps_data = self.file.read(4 * 1024)
         self.__read_chunks_to_memory()
 
-    def __ensure_file_open(self):
+    def __ensure_file_open(self) -> None:
         if not self.file:
             self.file = open(self.file_path, mode='r+b')
 
-    def __read_chunks_to_memory(self):
+    def __read_chunks_to_memory(self) -> None:
         for offset, size in self.chunk_locations:
             self.file.seek(offset)
             self.__raw_chunk_data[offset] = self.file.read(size)
 
-    def save(self):
+    def save(self) -> None:
         self.__ensure_file_open()
         self.file.seek((4 + 4) * 1024)  # Skip to the end of the region header
         # Sort chunks by offset
@@ -637,7 +688,7 @@ class Region(ComponentBase):
 
         self.is_dirty = False
 
-    def __write_header(self, file: BinaryIO):
+    def __write_header(self, file: BinaryIO) -> None:
         for c_loc in self.__chunk_locations:
             file.write(int(c_loc[0] / 4096).to_bytes(3))
             file.write(int(c_loc[1] / 4096).to_bytes(1))
@@ -645,7 +696,7 @@ class Region(ComponentBase):
         for ts in self.timestamps:
             file.write(ts.to_bytes(4))
 
-    def get_chunk(self, coord: ChunkCoordinate):
+    def get_chunk(self, coord: ChunkCoordinate) -> Chunk:
         chunk_index = Chunk.to_region_chunk_index(coord)
         print(f'Loading {coord.x}x {coord.z}z from {self.file_path}')
         if not chunk_index in self.chunks:
@@ -657,7 +708,7 @@ class Region(ComponentBase):
         else:
             return self.chunks[chunk_index]
 
-    def __read_region_after_header(self):
+    def __read_region_after_header(self) -> bytearray:
         self.__ensure_file_open()
         self.file.seek((4 + 4) * 1024)
         return bytearray(self.file.read())
@@ -679,7 +730,7 @@ class Region(ComponentBase):
         return self.__chunk_locations
 
     @property
-    def timestamps(self) -> list[list[int]]:
+    def timestamps(self) -> list[int]:
         if self.__timestamps is None:
             # Interpret header chunk
             self.__timestamps = [
@@ -691,5 +742,13 @@ class Region(ComponentBase):
         return self.__timestamps
 
     @staticmethod
-    def iterate_in_groups(container, group_size, start, end):
-        return (container[i: (i + group_size)] for i in range(start, end, group_size))
+    def iterate_in_groups(
+        container: bytes,
+        group_size: int,
+        start: int,
+        end: int,
+    ) -> Generator[bytes, None, None]:
+        return (
+            container[i: (i + group_size)]
+            for i in range(start, end, group_size)
+        )
