@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import TracebackType
-from typing import Self
+from typing import Collection, Self
 
 from pyanvil.components import Block, BlockState, Chunk, Region
 from pyanvil.coordinate import AbsoluteCoordinate, ChunkCoordinate, RegionCoordinate
@@ -58,7 +58,6 @@ class World:
                 region.save()
 
     def get_block(self, coordinate: AbsoluteCoordinate) -> Block:
-        self._get_region_file_name(coordinate.to_region_coordinate())
         chunk = self.get_chunk(coordinate.to_chunk_coordinate())
         return chunk.get_block(coordinate)
 
@@ -68,6 +67,22 @@ class World:
     def get_chunk(self, coord: ChunkCoordinate) -> Chunk:
         region = self.get_region(coord.to_region_coordinate())
         return region.get_chunk(coord)
+
+    def get_blocks(
+        self,
+        coords: Collection[AbsoluteCoordinate],
+    ) -> dict[AbsoluteCoordinate, Block]:
+        chunk_coords = {c.to_chunk_coordinate() for c in coords}
+        chunks = self.get_chunks(chunk_coords)
+        return {c: chunks[c.to_chunk_coordinate()].get_block(c) for c in coords}
+
+    def get_chunks(
+        self,
+        coords: Collection[ChunkCoordinate],
+    ) -> dict[ChunkCoordinate, Chunk]:
+        region_coords = {c.to_region_coordinate() for c in coords}
+        regions = {c: self.get_region(c) for c in region_coords}
+        return {c: regions[c.to_region_coordinate()].get_chunk(c) for c in coords}
 
     def get_canvas(self) -> Canvas:
         return Canvas(self)
@@ -118,11 +133,11 @@ class Canvas:
         min_x = min((loc.x for loc in self.selection))
         min_y = min((loc.y for loc in self.selection))
         min_z = min((loc.z for loc in self.selection))
+        rel_origin = AbsoluteCoordinate(min_x, min_y, min_z)
         print(min_x, min_y, min_z)
-
-        new_schem = Schematic({
-            AbsoluteCoordinate(loc.x - min_x, loc.y - min_y, loc.z - min_z): self.world.get_block(loc).get_state() for loc in self.selection
-        })
+        blocks = self.world.get_blocks(self.selection)
+        state_map = {c - rel_origin: b.get_state() for c, b in blocks.items()}
+        new_schem = Schematic(state_map)
         self.deselect()
         return new_schem
 
@@ -200,6 +215,7 @@ class Schematic:
         self.state_map = state_map
 
     def paste(self, world: World, corner: AbsoluteCoordinate) -> None:
+        blocks = world.get_blocks([loc + corner for loc in self.state_map])
         for loc, state in self.state_map.items():
-            shift_loc = loc + corner
-            world.get_block(shift_loc).set_state(state)
+            block = blocks[loc + corner]
+            block.set_state(state)
