@@ -172,6 +172,9 @@ class Biome:
     def __str__(self) -> str:
         return f'Biome({self.name})'
 
+    def __repr__(self) -> str:
+        return f'Biome({self.name})'
+
     def __hash__(self) -> int:
         return hash(self.name)
 
@@ -278,7 +281,9 @@ class ChunkSection(ComponentBase):
         else:
             flatbiomes = [c.get() for c in section_nbt['biomes']['data']]
             pack_size = (len(biomes_palette) - 1).bit_length()
-            biome_indexes = ChunkSection._read_width_from_loc(flatbiomes, pack_size, (Sizes.SUBCHUNK_WIDTH//Sizes.BIOME_REGION_WIDTH)**3)
+            biome_indexes = [
+                ChunkSection._read_width_from_loc(flatbiomes, pack_size, i) for i in range((Sizes.SUBCHUNK_WIDTH//Sizes.BIOME_REGION_WIDTH)**3)
+            ]
 
         biome_regions: dict[int, BiomeRegion] = dict()
         for i, biome_index in enumerate(biome_indexes):
