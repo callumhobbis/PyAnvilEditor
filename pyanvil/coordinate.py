@@ -14,6 +14,10 @@ class Coordinate(ABC):
         return hash((self.x, self.z))
 
     @abstractmethod
+    def __eq__(self, other) -> bool:
+        pass
+
+    @abstractmethod
     def to_absolute_coordinate(self) -> 'AbsoluteCoordinate':
         pass
 
@@ -37,6 +41,14 @@ class AbsoluteCoordinate(Coordinate):
 
     def __hash__(self) -> int:
         return hash((self.x, self.y, self.z))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, AbsoluteCoordinate):
+            return False
+        return self.x == other.x and self.y == other.y and self.z == other.z
+
+    def __repr__(self) -> str:
+        return f'AbsoluteCoordinate({self.x}, {self.y}, {self.z})'
 
     def __add__(self, other: AbsoluteCoordinate) -> AbsoluteCoordinate:
         return AbsoluteCoordinate(self.x + other.x, self.y + other.y, self.z + other.z)
@@ -69,6 +81,14 @@ class BiomeCoordinate(Coordinate):
     def __hash__(self) -> int:
         return hash((self.x, self.y, self.z))
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, BiomeCoordinate):
+            return False
+        return self.x == other.x and self.y == other.y and self.z == other.z
+
+    def __repr__(self) -> str:
+        return f'BiomeCoordinate({self.x}, {self.y}, {self.z})'
+
     def to_absolute_coordinate(self) -> 'AbsoluteCoordinate':
         return AbsoluteCoordinate(x=self.x * 4, y=self.y * 4, z=self.z * 4)
 
@@ -88,6 +108,14 @@ class ChunkCoordinate(Coordinate):
 
     def __hash__(self) -> int:
         return hash((self.x, self.z))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ChunkCoordinate):
+            return False
+        return self.x == other.x and self.z == other.z
+
+    def __repr__(self) -> str:
+        return f'ChunkCoordinate({self.x}, {self.z})'
 
     def to_absolute_coordinate(self) -> 'AbsoluteCoordinate':
         return AbsoluteCoordinate(x=self.x * 16, y=0, z=self.z * 16)
@@ -109,6 +137,14 @@ class RelativeChunkCoordinate(ChunkCoordinate):
     def __hash__(self) -> int:
         return hash((self.x, self.z))
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, RelativeChunkCoordinate):
+            return False
+        return self.x == other.x and self.z == other.z
+
+    def __repr__(self) -> str:
+        return f'RelativeChunkCoordinate({self.x}, {self.z})'
+
 
 class RegionCoordinate(Coordinate):
     def __init__(self, x: int = 0, z: int = 0):
@@ -116,6 +152,14 @@ class RegionCoordinate(Coordinate):
 
     def __hash__(self) -> int:
         return hash((self.x, self.z))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, RegionCoordinate):
+            return False
+        return self.x == other.x and self.z == other.z
+
+    def __repr__(self) -> str:
+        return f'RegionCoordinate({self.x}, {self.z})'
 
     def to_absolute_coordinate(self) -> 'AbsoluteCoordinate':
         return AbsoluteCoordinate(x=self.x * 16 * 32, y=0, z=self.z * 16 * 32)
