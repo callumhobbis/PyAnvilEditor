@@ -663,7 +663,7 @@ class Region(ComponentBase):
             loc = self.__chunk_locations[index]
             original_sector_length = loc[1]
             data_len_diff = block_data_len - original_sector_length
-            if data_len_diff != 0 and self.debug:
+            if data_len_diff != 0:
                 print(f'Danger: Diff is {data_len_diff}, shifting required!')
 
             self.__chunk_locations[index][1] = block_data_len

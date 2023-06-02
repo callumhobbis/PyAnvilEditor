@@ -97,29 +97,23 @@ class World:
         return f'r.{region.x}.{region.z}.mca'
 
 
-class WorldTask:
-    def __init__(self, location, new_state):
-        self.location = location
-        self.new_state = new_state
-
-
 class Canvas:
 
     world: World
-    work_queue: list[WorldTask]
+    work_queue: dict[AbsoluteCoordinate, BlockState]
     auto_commit: bool
     selection: set[AbsoluteCoordinate]
+    clipboard: dict[AbsoluteCoordinate, Block]
 
     def __init__(self, world: World, auto_commit: bool = True) -> None:
         self.world = world
-        self.work_queue = []
+        self.work_queue = {}
         self.auto_commit = auto_commit
         self.selection = set()
 
     def fill(self, state: BlockState) -> None:
-        my_state = state.clone()
         for b in list(self.selection):
-            self.work_queue.append(WorldTask(b, my_state))
+            self.work_queue[b] = state.clone()
 
         self.deselect()
 
@@ -129,32 +123,28 @@ class Canvas:
     def deselect(self) -> None:
         self.selection.clear()
 
-    def copy(self) -> Schematic:
+    def copy(self) -> Self:
         min_x = min((loc.x for loc in self.selection))
         min_y = min((loc.y for loc in self.selection))
         min_z = min((loc.z for loc in self.selection))
         rel_origin = AbsoluteCoordinate(min_x, min_y, min_z)
-        print(min_x, min_y, min_z)
         blocks = self.world.get_blocks(self.selection)
-        state_map = {c - rel_origin: b.get_state() for c, b in blocks.items()}
-        new_schem = Schematic(state_map)
+        self.clipboard = {c - rel_origin: b for c, b in blocks.items()}
         self.deselect()
-        return new_schem
+        return self
+
+    def paste(self, corner: AbsoluteCoordinate) -> Self:
+        replaced_blocks = self.world.get_blocks([loc + corner for loc in self.clipboard])
+        for loc, block in self.clipboard.items():
+            replaced_block = replaced_blocks[loc + corner]
+            replaced_block.set_state(block.get_state())
+        return self
 
     def commit(self) -> None:
-        region_work: dict[Region, list[WorldTask]] = {}
-        for task in self.work_queue:
-            chunk = self.world.get_chunk(task.location)
-            region_coord = chunk.coordinate.to_region_coordinate()
-            region = self.world.get_region(region_coord)
-            if region not in region_work:
-                region_work[region] = []
-            region_work[region].append(task)
-
-        for work in region_work.values():
-            for task in work:
-                self.world.get_block(task.location).set_state(task.new_state)
-            self.world.flush()
+        blocks = self.world.get_blocks(self.work_queue.keys())
+        for loc, new_state in self.work_queue.items():
+            blocks[loc].set_state(new_state)
+        self.world.flush()
 
     def select_rectangle(
         self,
